@@ -180,7 +180,21 @@ int main ()
     res = dxgi_factory->CreateSwapChain(command_queue, &swap_chain_desc, &swap_chain);
     CHECK_AND_FAIL(res);
 
+    // Using DXC
+    // Shaders, RootSignatures, DescriptorHeaps etc...
+    // Graphics Pipeline Creation
+    // Memory Allocation in D3D12, Vertes/Index Buffers
+    // Command Submission and Recording in D3D12
+    // Fence and Sync objects
+    // Main Loop and SDL Event Handling
+    // Try WARP
+    // Integrate STB to Load Images
+    // Texture Sampling Demo
+    // Abstract and Make Code Nicer and More Flexible
+    // Compute Shader and SoftwareRasterizer Begin Design and Implementation
+
     // Cleanup
+    swap_chain->Release();
     command_queue->Release();
     dxgi_factory->Release();
     debug_interface_dx->Release();
