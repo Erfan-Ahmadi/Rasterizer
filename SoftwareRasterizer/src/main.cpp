@@ -45,6 +45,7 @@
 
 #define SDL_MAIN_HANDLED
 #include "SDL2/SDL.h"
+#include "SDL2/SDL_syswm.h"
 
 #include <cstdio>
 #include <algorithm>
@@ -76,7 +77,7 @@ runtimeobject.lib
 #define FAILED(hr)      (((HRESULT)(hr)) < 0)
 #define CHECK_AND_FAIL(hr)                          \
     if (FAILED(hr)) {                               \
-        ::printf("[ERROR] " #hr "() failed. \n");   \
+        ::printf("[ERROR] " #hr "() failed at line %d. \n", __LINE__);   \
         ::abort();                                  \
     }                                               \
     /**/
@@ -93,30 +94,42 @@ enum class Rasterizer {
     MyRasterizer,
 };
 
+static constexpr uint32_t frame_queue_length = 2;
+static uint32_t window_width = 1280;
+static uint32_t window_height = 720;
+
 int main () 
 {
     // Configurable Options
+    Rasterizer rasterizer = Rasterizer::HardwareD3D12;
     bool vsync_on = false;
 
     // SDL_Init
     SDL_Init(SDL_INIT_VIDEO);
 
     // Enable Debug Layer
+    UINT dxgiFactoryFlags = 0;
 #if ENABLE_DEBUG_LAYER > 0
     ID3D12Debug * debug_interface_dx = nullptr;
     if(SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debug_interface_dx)))) {
         debug_interface_dx->EnableDebugLayer();
+        dxgiFactoryFlags |= DXGI_CREATE_FACTORY_DEBUG;
     }
 #endif
+
     // Create a Window
-    SDL_Window * wnd = SDL_CreateWindow("LearningD3D12", 0, 0, 1280, 720, 0);
+    SDL_Window * wnd = SDL_CreateWindow("LearningD3D12", 0, 0, window_width, window_height, 0);
+    SDL_SysWMinfo wmInfo;
+    SDL_VERSION(&wmInfo.version);
+    SDL_bool sdl_res = SDL_GetWindowWMInfo(wnd, &wmInfo);
+    HWND hwnd = wmInfo.info.win.window;
     if(nullptr == wnd) {
         ::abort();
     }
-    // Query Adapter (PhysicalDevice)
 
+    // Query Adapter (PhysicalDevice)
     IDXGIFactory * dxgi_factory = nullptr;
-    CHECK_AND_FAIL(CreateDXGIFactory(IID_PPV_ARGS(&dxgi_factory)));
+    CHECK_AND_FAIL(CreateDXGIFactory2(dxgiFactoryFlags, IID_PPV_ARGS(&dxgi_factory)));
 
     constexpr uint32_t MaxAdapters = 8;
     IDXGIAdapter * adapters[MaxAdapters] = {};
@@ -138,27 +151,41 @@ int main ()
     CHECK_AND_FAIL(res);
 
     // Create Command Queues
+    ID3D12CommandQueue * command_queue = nullptr;
+    D3D12_COMMAND_QUEUE_DESC command_queue_desc = {};
+    command_queue_desc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
+    command_queue_desc.Priority = D3D12_COMMAND_QUEUE_PRIORITY_NORMAL;
+    command_queue_desc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
+    command_queue_desc.NodeMask = 0;
+    res = d3d_device->CreateCommandQueue(&command_queue_desc, IID_PPV_ARGS(&command_queue));
+    CHECK_AND_FAIL(res);
 
     // Create Swapchain 
+    IDXGISwapChain * swap_chain = nullptr;
+    DXGI_SWAP_CHAIN_DESC swap_chain_desc = {};
+    swap_chain_desc.BufferDesc.Width = window_width;
+    swap_chain_desc.BufferDesc.Height = window_height;
+    swap_chain_desc.BufferDesc.RefreshRate = DXGI_RATIONAL {};
+    swap_chain_desc.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    swap_chain_desc.BufferDesc.ScanlineOrdering = DXGI_MODE_SCANLINE_ORDER_UNSPECIFIED;
+    swap_chain_desc.BufferDesc.Scaling = DXGI_MODE_SCALING_UNSPECIFIED;
+    swap_chain_desc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+    swap_chain_desc.SampleDesc.Count = 1;
+    swap_chain_desc.SampleDesc.Quality = 0;
+    swap_chain_desc.BufferCount = frame_queue_length;
+    swap_chain_desc.OutputWindow = hwnd;
+    swap_chain_desc.Windowed = true;
+    swap_chain_desc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+    swap_chain_desc.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
+    res = dxgi_factory->CreateSwapChain(command_queue, &swap_chain_desc, &swap_chain);
+    CHECK_AND_FAIL(res);
 
+    // Cleanup
+    command_queue->Release();
     dxgi_factory->Release();
     debug_interface_dx->Release();
+    SDL_DestroyWindow(wnd);
+    SDL_Quit();
 
-    // Loop 
-    /*
-    * 
-        // Wait for fences
-        CHECK(YRB::WaitForFences(&fences_framedone[frame_index], 1));
-
-        - SwapChain -> Give me the next image to render to.
-
-        - Render to Image
-
-        - Present SwapChain Image
-    */
-
-
-    // Other stuff -> Shaders, DescriptorManagement (DescriptorHeap, RootSignature), PSO, Sync Objects, Buffers, Textures, ...
-    
     return 0;
 }
