@@ -100,9 +100,6 @@ int main ()
         ::abort();
     }
     
-    ShaderCompileHelper shader_compiler = {};
-    shader_compiler.init();
-
     // Query Adapter (PhysicalDevice)
     IDXGIFactory * dxgi_factory = nullptr;
     CHECK_AND_FAIL(CreateDXGIFactory2(dxgiFactoryFlags, IID_PPV_ARGS(&dxgi_factory)));
@@ -155,10 +152,16 @@ int main ()
     swap_chain_desc.Flags = (vsync_on) ? 0 : DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
     res = dxgi_factory->CreateSwapChain(command_queue, &swap_chain_desc, &swap_chain);
     CHECK_AND_FAIL(res);
+    
+    ShaderCompileHelper shader_compiler = {};
+    shader_compiler.init();
 
+    IDxcBlob * vertex_shader = shader_compiler.compile_from_file(L"../code/src/shaders/simple_mesh.vert.hlsl", L"VSMain", L"vs_6_5");
+    IDxcBlob * pixel_shader = shader_compiler.compile_from_file(L"../code/src/shaders/simple_mesh.frag.hlsl", L"PSMain", L"ps_6_5");
+    vertex_shader->Release();
+    pixel_shader->Release();
 
-    IDxcBlob * shader = shader_compiler.compile_from_file(L"../code/src/shaders/simple_mesh.frag.hlsl", L"PSMain", L"ps_6_0");
-    shader->Release();
+    shader_compiler.exit();
 
     // Shaders, RootSignatures, DescriptorHeaps etc...
     // Graphics Pipeline Creation
@@ -173,7 +176,6 @@ int main ()
     // Compute Shader and SoftwareRasterizer Begin Design and Implementation
 
     // Cleanup
-    shader_compiler.exit();
     swap_chain->Release();
     command_queue->Release();
     dxgi_factory->Release();

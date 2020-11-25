@@ -30,5 +30,8 @@
     <FxCompile Include="..\code\src\shaders\simple_mesh.frag.hlsl">
       <Filter>Source Files\shaders</Filter>
     </FxCompile>
+    <FxCompile Include="..\code\src\shaders\simple_mesh.vert.hlsl">
+      <Filter>Source Files\shaders</Filter>
+    </FxCompile>
   </ItemGroup>
 </Project>

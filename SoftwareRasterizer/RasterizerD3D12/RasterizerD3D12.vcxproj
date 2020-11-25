@@ -41,6 +41,11 @@
   <ItemGroup>
     <ClInclude Include="..\code\headers\common.h" />
   </ItemGroup>
+  <ItemGroup>
+    <Text Include="..\code\src\shaders\simple_mesh.vert.hlsl">
+      <FileType>Document</FileType>
+    </Text>
+  </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>16.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
