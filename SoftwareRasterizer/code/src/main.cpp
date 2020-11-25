@@ -1,92 +1,4 @@
-#include <stdio.h>
-
-// DirectX 12 specific headers.
-#include <d3d12.h>
-#include <dxgi1_6.h>
-#include <d3dcompiler.h>
-#include <DirectXMath.h>
-
-#if !defined(NDEBUG) && !defined(_DEBUG)
-#error "Define at least one."
-#elif defined(NDEBUG) && defined(_DEBUG)
-#error "Define at most one."
-#endif
-
-#if defined(_WIN64)
-#if defined(_DEBUG)
-#pragma comment (lib, "64/SDL2-staticd")
-#else
-#pragma comment (lib, "64/SDL2-static")
-#endif
-#else
-#if defined(_DEBUG)
-#pragma comment (lib, "32/SDL2-staticd")
-#else
-#pragma comment (lib, "32/SDL2-static")
-#endif
-#endif
-
-#pragma comment (lib, "Imm32")
-#pragma comment (lib, "Setupapi")
-#pragma comment (lib, "Version")
-#pragma comment (lib, "Winmm")
-
-#pragma comment (lib, "d3d12")
-#pragma comment (lib, "dxgi")
-#pragma comment (lib, "dxguid")
-#pragma comment (lib, "uuid")
-#pragma comment (lib, "gdi32")
-
-#define _CRT_SECURE_NO_WARNINGS 1
-
-#define NOMINMAX
-#define WIN32_LEAN_AND_MEAN
-#include <Windows.h>
-
-#define SDL_MAIN_HANDLED
-#include "SDL2/SDL.h"
-#include "SDL2/SDL_syswm.h"
-
-#include <cstdio>
-#include <algorithm>
-
-// windows runtime library. needed for microsoft::wrl::comptr<> template class.
-//#include <wrl.h>
-//using namespace microsoft::wrl;
-
-/*
-d3d12.lib
-dxgi.lib
-dxguid.lib
-uuid.lib
-kernel32.lib
-user32.lib
-gdi32.lib
-winspool.lib
-comdlg32.lib
-advapi32.lib
-shell32.lib
-ole32.lib
-oleaut32.lib
-odbc32.lib
-odbccp32.lib
-runtimeobject.lib
-*/
-
-#define SUCCEEDED(hr)   (((HRESULT)(hr)) >= 0)
-#define FAILED(hr)      (((HRESULT)(hr)) < 0)
-#define CHECK_AND_FAIL(hr)                          \
-    if (FAILED(hr)) {                               \
-        ::printf("[ERROR] " #hr "() failed at line %d. \n", __LINE__);   \
-        ::abort();                                  \
-    }                                               \
-    /**/
-
-#if defined(_DEBUG)
-#define ENABLE_DEBUG_LAYER 1
-#else
-#define ENABLE_DEBUG_LAYER 0
-#endif
+#include "common.h"
 
 enum class Rasterizer {
     HardwareD3D12 = 0,
@@ -98,11 +10,71 @@ static constexpr uint32_t frame_queue_length = 2;
 static uint32_t window_width = 1280;
 static uint32_t window_height = 720;
 
+struct ShaderCompileHelper {
+private:
+    IDxcLibrary * library;
+    IDxcCompiler * compiler;
+public:
+    void init() {
+        HRESULT res = DxcCreateInstance(CLSID_DxcLibrary, IID_PPV_ARGS(&library));
+        CHECK_AND_FAIL(res);
+        res = DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(&compiler));
+        CHECK_AND_FAIL(res);
+    }
+    void exit() {
+        compiler->Release();
+        library->Release();
+    }
+    IDxcBlob * compile_from_file(LPCWSTR path, LPCWSTR entry_point, LPCWSTR target_profile) {
+        IDxcBlob * code = nullptr;
+
+        uint32_t codePage = CP_UTF8;
+        IDxcBlobEncoding * sourceBlob;
+        HRESULT res = library->CreateBlobFromFile(path, &codePage, &sourceBlob);
+        CHECK_AND_FAIL(res);
+
+        IDxcOperationResult * result;
+
+        res = compiler->Compile(
+            sourceBlob, // pSource
+            path, // pSourceName
+            entry_point, // pEntryPoint
+            target_profile, // pTargetProfile
+            NULL, 0, // pArguments, argCount
+            NULL, 0, // pDefines, defineCount
+            NULL, // pIncludeHandler
+            &result); // ppResult
+        
+        if(SUCCEEDED(res))
+            result->GetStatus(&res);
+        if(FAILED(res))
+        {
+            ASSERT(nullptr != result);
+            if(result)
+            {
+                IDxcBlobEncoding * errorsBlob;
+                res = result->GetErrorBuffer(&errorsBlob);
+                if(SUCCEEDED(res) && errorsBlob)
+                {
+                    wprintf(L"Compilation failed with errors:\n%hs\n",
+                        (const char*)errorsBlob->GetBufferPointer());
+                }
+            }
+        } else {
+            result->GetResult(&code);
+        }
+
+        sourceBlob->Release();
+        return code;
+    }
+};
+
 int main () 
 {
     // Configurable Options
     Rasterizer rasterizer = Rasterizer::HardwareD3D12;
     bool vsync_on = false;
+    CONSUME_VAR(rasterizer);
 
     // SDL_Init
     SDL_Init(SDL_INIT_VIDEO);
@@ -122,10 +94,14 @@ int main ()
     SDL_SysWMinfo wmInfo;
     SDL_VERSION(&wmInfo.version);
     SDL_bool sdl_res = SDL_GetWindowWMInfo(wnd, &wmInfo);
+    ASSERT(SDL_TRUE == sdl_res);
     HWND hwnd = wmInfo.info.win.window;
     if(nullptr == wnd) {
         ::abort();
     }
+    
+    ShaderCompileHelper shader_compiler = {};
+    shader_compiler.init();
 
     // Query Adapter (PhysicalDevice)
     IDXGIFactory * dxgi_factory = nullptr;
@@ -176,11 +152,14 @@ int main ()
     swap_chain_desc.OutputWindow = hwnd;
     swap_chain_desc.Windowed = true;
     swap_chain_desc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
-    swap_chain_desc.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
+    swap_chain_desc.Flags = (vsync_on) ? 0 : DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
     res = dxgi_factory->CreateSwapChain(command_queue, &swap_chain_desc, &swap_chain);
     CHECK_AND_FAIL(res);
 
-    // Using DXC
+
+    IDxcBlob * shader = shader_compiler.compile_from_file(L"../code/src/shaders/simple_mesh.frag.hlsl", L"PSMain", L"ps_6_0");
+    shader->Release();
+
     // Shaders, RootSignatures, DescriptorHeaps etc...
     // Graphics Pipeline Creation
     // Memory Allocation in D3D12, Vertes/Index Buffers
@@ -194,6 +173,7 @@ int main ()
     // Compute Shader and SoftwareRasterizer Begin Design and Implementation
 
     // Cleanup
+    shader_compiler.exit();
     swap_chain->Release();
     command_queue->Release();
     dxgi_factory->Release();
