@@ -1,6 +1,6 @@
 struct VSInput
 {
-	float3 Position	    	: SV_POSITION;
+	float4 Position	    	: SV_POSITION;
     float4 Col	        	: COLOR0;
 	float2 UV				: TEXCOORD0;
 };
@@ -26,7 +26,7 @@ struct VSOutput
 VSOutput VSMain(VSInput input)
 {
 	VSOutput output;
-    output.Position = mul(proj, mul(view, mul(world, float4(input.Position, 1.0f))));
+    output.Position = input.Position;// mul(proj, mul(view, mul(world, float4(input.Position, 1.0f))));
     output.FragColor = input.Col;
     output.UV = input.UV;
     return output;

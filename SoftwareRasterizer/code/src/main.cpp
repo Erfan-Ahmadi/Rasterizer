@@ -158,6 +158,9 @@ int main ()
 
     IDxcBlob * vertex_shader = shader_compiler.compile_from_file(L"../code/src/shaders/simple_mesh.vert.hlsl", L"VSMain", L"vs_6_5");
     IDxcBlob * pixel_shader = shader_compiler.compile_from_file(L"../code/src/shaders/simple_mesh.frag.hlsl", L"PSMain", L"ps_6_5");
+    ASSERT(nullptr != vertex_shader);
+    ASSERT(nullptr != pixel_shader);
+
     vertex_shader->Release();
     pixel_shader->Release();
 
@@ -165,9 +168,9 @@ int main ()
 
     // Shaders, RootSignatures, DescriptorHeaps etc...
     // Graphics Pipeline Creation
-    // Memory Allocation in D3D12, Vertes/Index Buffers
+    // Memory Allocation in D3D12, Vertex/Index Buffers
     // Command Submission and Recording in D3D12
-    // Fence and Sync objects
+    // Fence and Sync objects, Barriers
     // Main Loop and SDL Event Handling
     // Try WARP
     // Integrate STB to Load Images
