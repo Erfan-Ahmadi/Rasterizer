@@ -152,12 +152,18 @@ int main ()
             ::printf("\tDescription: %ls\n", adapter_desc.Description);
             ::printf("\tDedicatedVideoMemory: %zu\n", adapter_desc.DedicatedVideoMemory);
         }
-    } // WARP -> Windows Advanced Rasterization ...
+    }
 
     // Create Logical Device
     ID3D12Device * d3d_device = nullptr;
     auto res = D3D12CreateDevice(adapters[0], D3D_FEATURE_LEVEL_12_0, IID_PPV_ARGS(&d3d_device));
     CHECK_AND_FAIL(res);
+    
+    for (uint32_t i = 0; i < MaxAdapters; ++i) {
+        if(nullptr != adapters[i]) {
+            adapters[i]->Release();
+        }
+    }
 
     // Create Command Queues
     ID3D12CommandQueue * direct_queue = nullptr;
@@ -202,10 +208,27 @@ int main ()
 
     // ------------------------------------------ [BEGIN] Specific to a Demo ------------------------------------------
 
+    ID3D12CommandAllocator * direct_cmd_allocator = nullptr;
+    ID3D12CommandAllocator * compute_cmd_allocator = nullptr;
+    ID3D12CommandAllocator * copy_cmd_allocator = nullptr;
+    res = d3d_device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&direct_cmd_allocator));
+    CHECK_AND_FAIL(res);
+    res = d3d_device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_COMPUTE, IID_PPV_ARGS(&compute_cmd_allocator));
+    CHECK_AND_FAIL(res);
+    res = d3d_device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_COPY, IID_PPV_ARGS(&copy_cmd_allocator));
+    CHECK_AND_FAIL(res);
+
+    ID3D12GraphicsCommandList * copy_cmd_list = nullptr;
+    res = d3d_device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_COPY, copy_cmd_allocator, nullptr, IID_PPV_ARGS(&copy_cmd_list));
+    CHECK_AND_FAIL(res);
+
     IDxcBlob * vertex_shader = shader_compiler.compile_from_file(L"../code/src/shaders/simple_mesh.vert.hlsl", L"VSMain", L"vs_6_5");
     IDxcBlob * pixel_shader = shader_compiler.compile_from_file(L"../code/src/shaders/simple_mesh.frag.hlsl", L"PSMain", L"ps_6_5");
     ASSERT(nullptr != vertex_shader);
     ASSERT(nullptr != pixel_shader);
+
+    // RootSignatures, DescriptorHeaps etc...
+    // Graphics Pipeline Creation
 
     vertex_shader->Release();
     pixel_shader->Release();
@@ -216,18 +239,30 @@ int main ()
     ID3D12Resource * vertex_buffer = nullptr;
     ID3D12Resource * index_buffer = nullptr;
     size_t vertex_buffer_size = sizeof(Vertex) * triangle_mesh.vertices.size();
-    size_t index_buffer_size = sizeof(IndexType) * triangle_mesh.vertices.size();
+    size_t index_buffer_size = sizeof(IndexType) * triangle_mesh.indices.size();
 
-    CONSUME_VAR(vertex_buffer);
     CONSUME_VAR(index_buffer);
     CONSUME_VAR(index_buffer_size);
+
     // Vertex Buffer
+    if(false)
     {
+        // Buffer Allocation
+        D3D12_HEAP_PROPERTIES   heap_props      = GetDefaultHeapProps(D3D12_HEAP_TYPE_DEFAULT);
+        D3D12_RESOURCE_DESC     resource_desc   = GetBufferResourceDesc(vertex_buffer_size);
+        res = d3d_device->CreateCommittedResource(&heap_props,
+            D3D12_HEAP_FLAG_NONE,
+            &resource_desc,
+            D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER,
+            nullptr,
+            IID_PPV_ARGS(&vertex_buffer));
+        CHECK_AND_FAIL(res);
+
         ID3D12Resource * staging_vertex_buffer = nullptr;
 
         // Staging
-        D3D12_HEAP_PROPERTIES   staging_heap_props = GetDefaultHeapProps(D3D12_HEAP_TYPE_UPLOAD);
-        D3D12_RESOURCE_DESC     staging_resource_desc = GetBufferResourceDesc(vertex_buffer_size);
+        D3D12_HEAP_PROPERTIES   staging_heap_props      = GetDefaultHeapProps(D3D12_HEAP_TYPE_UPLOAD);
+        D3D12_RESOURCE_DESC     staging_resource_desc   = GetBufferResourceDesc(vertex_buffer_size);
         res = d3d_device->CreateCommittedResource(&staging_heap_props,
             D3D12_HEAP_FLAG_NONE,
             &staging_resource_desc,
@@ -235,6 +270,9 @@ int main ()
             nullptr,
             IID_PPV_ARGS(&staging_vertex_buffer));
         CHECK_AND_FAIL(res);
+        
+        // Copy to Buffer
+        copy_cmd_list->CopyBufferRegion(vertex_buffer, 0, staging_vertex_buffer, 0, vertex_buffer_size);
 
         // Delete Staging Buffer
         staging_vertex_buffer->Release();
@@ -247,9 +285,6 @@ int main ()
 
     shader_compiler.exit();
 
-    // Command Submission and Recording in D3D12
-    // RootSignatures, DescriptorHeaps etc...
-    // Graphics Pipeline Creation
     // Fence and Sync objects, Barriers
     // Main Loop and SDL Event Handling
     // Draw The Triangle !
@@ -259,19 +294,50 @@ int main ()
     // Abstract and Make Code Nicer and More Flexible (DemoFramework?)
     // Compute Shader and SoftwareRasterizer Begin Design and Implementation
     
+    copy_cmd_list->Release();
+    direct_cmd_allocator->Release();
+    compute_cmd_allocator->Release();
+    copy_cmd_allocator->Release();
+
     // ------------------------------------------ [END] Specific to a Demo ------------------------------------------
 
     // Cleanup
+
     swap_chain->Release();
 
     direct_queue->Release();
     compute_queue->Release();
     copy_queue->Release();
 
-    dxgi_factory->Release();
+#if ENABLE_DEBUG_LAYER > 0
     debug_interface_dx->Release();
+#endif
+    d3d_device->Release();
+    
+    dxgi_factory->Release();
+    
+    // DXGI Debug for ReportLiveObjects
+    {
+        HINSTANCE hDLL;               // Handle to DLL
+        typedef HRESULT (*DXGIGetDebugInterface_FN)(REFIID riid, void **ppDebug);
+        DXGIGetDebugInterface_FN DXGIGetDebugInterface_FUNC = nullptr;
+        hDLL = LoadLibrary(L"DXGIDebug.dll");
+        if (hDLL != NULL)
+        {
+           DXGIGetDebugInterface_FUNC = (DXGIGetDebugInterface_FN)GetProcAddress(hDLL, "DXGIGetDebugInterface");
+        }
+        IDXGIDebug * dxgi_debug = nullptr;
+        res = DXGIGetDebugInterface_FUNC(IID_PPV_ARGS(&dxgi_debug));
+        CHECK_AND_FAIL(res);
+        res = dxgi_debug->ReportLiveObjects(DXGI_DEBUG_ALL, DXGI_DEBUG_RLO_DETAIL);
+        CHECK_AND_FAIL(res);
+        dxgi_debug->Release();
+        FreeLibrary(hDLL);
+    }
+
     SDL_DestroyWindow(wnd);
     SDL_Quit();
+
 
     return 0;
 }
