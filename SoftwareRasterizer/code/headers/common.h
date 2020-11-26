@@ -115,3 +115,33 @@ struct Mesh {
     std::vector<Vertex> vertices;
     std::vector<IndexType> indices;
 };
+
+inline D3D12_HEAP_PROPERTIES GetDefaultHeapProps(D3D12_HEAP_TYPE type) {
+    D3D12_HEAP_PROPERTIES ret = {};
+    ret.Type = type;
+    ret.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
+    ret.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
+    ret.CreationNodeMask = 0;
+    ret.VisibleNodeMask = 0;
+    return ret;
+}
+
+inline D3D12_RESOURCE_DESC GetBufferResourceDesc(
+    UINT64 width,
+    D3D12_RESOURCE_FLAGS flags = D3D12_RESOURCE_FLAG_NONE,
+    UINT64 alignment = 0 ) noexcept
+{
+    D3D12_RESOURCE_DESC ret = {};
+    ret.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+    ret.Alignment = alignment;
+    ret.Width = width;
+    ret.Height = 1;
+    ret.DepthOrArraySize = 1;
+    ret.MipLevels = 1;
+    ret.Format = DXGI_FORMAT_UNKNOWN;
+    ret.SampleDesc.Count = 1;
+    ret.SampleDesc.Quality = 0;
+    ret.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+    ret.Flags = flags;
+    return ret;
+}

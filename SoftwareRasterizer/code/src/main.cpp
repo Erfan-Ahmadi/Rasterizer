@@ -160,13 +160,21 @@ int main ()
     CHECK_AND_FAIL(res);
 
     // Create Command Queues
-    ID3D12CommandQueue * command_queue = nullptr;
+    ID3D12CommandQueue * direct_queue = nullptr;
+    ID3D12CommandQueue * compute_queue = nullptr;
+    ID3D12CommandQueue * copy_queue= nullptr;
     D3D12_COMMAND_QUEUE_DESC command_queue_desc = {};
     command_queue_desc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
     command_queue_desc.Priority = D3D12_COMMAND_QUEUE_PRIORITY_NORMAL;
     command_queue_desc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
     command_queue_desc.NodeMask = 0;
-    res = d3d_device->CreateCommandQueue(&command_queue_desc, IID_PPV_ARGS(&command_queue));
+    res = d3d_device->CreateCommandQueue(&command_queue_desc, IID_PPV_ARGS(&direct_queue));
+    CHECK_AND_FAIL(res);
+    command_queue_desc.Type = D3D12_COMMAND_LIST_TYPE_COMPUTE;
+    res = d3d_device->CreateCommandQueue(&command_queue_desc, IID_PPV_ARGS(&compute_queue));
+    CHECK_AND_FAIL(res);
+    command_queue_desc.Type = D3D12_COMMAND_LIST_TYPE_COPY;
+    res = d3d_device->CreateCommandQueue(&command_queue_desc, IID_PPV_ARGS(&copy_queue));
     CHECK_AND_FAIL(res);
 
     // Create Swapchain 
@@ -186,7 +194,7 @@ int main ()
     swap_chain_desc.Windowed = true;
     swap_chain_desc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
     swap_chain_desc.Flags = (vsync_on) ? 0 : DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
-    res = dxgi_factory->CreateSwapChain(command_queue, &swap_chain_desc, &swap_chain);
+    res = dxgi_factory->CreateSwapChain(direct_queue, &swap_chain_desc, &swap_chain);
     CHECK_AND_FAIL(res);
     
     ShaderCompileHelper shader_compiler = {};
@@ -212,17 +220,24 @@ int main ()
 
     CONSUME_VAR(vertex_buffer);
     CONSUME_VAR(index_buffer);
-    CONSUME_VAR(vertex_buffer_size);
     CONSUME_VAR(index_buffer_size);
     // Vertex Buffer
     {
-        //ID3D12Resource * staging_vertex_buffer = nullptr;
-        //d3d_device->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
-        //    D3D12_HEAP_FLAG_NONE,
-        //    &CD3DX12_RESOURCE_DESC::Buffer(vertex_buffer_size),
-        //    D3D12_RESOURCE_STATE_COPY_SOURCE,
-        //    nullptr,
-        //    IID_PPV_ARGS(&staging_vertex_buffer));
+        ID3D12Resource * staging_vertex_buffer = nullptr;
+
+        // Staging
+        D3D12_HEAP_PROPERTIES   staging_heap_props = GetDefaultHeapProps(D3D12_HEAP_TYPE_UPLOAD);
+        D3D12_RESOURCE_DESC     staging_resource_desc = GetBufferResourceDesc(vertex_buffer_size);
+        res = d3d_device->CreateCommittedResource(&staging_heap_props,
+            D3D12_HEAP_FLAG_NONE,
+            &staging_resource_desc,
+            D3D12_RESOURCE_STATE_GENERIC_READ | D3D12_RESOURCE_STATE_COPY_SOURCE,
+            nullptr,
+            IID_PPV_ARGS(&staging_vertex_buffer));
+        CHECK_AND_FAIL(res);
+
+        // Delete Staging Buffer
+        staging_vertex_buffer->Release();
     }
     // Index Buffer 
     {
@@ -248,7 +263,11 @@ int main ()
 
     // Cleanup
     swap_chain->Release();
-    command_queue->Release();
+
+    direct_queue->Release();
+    compute_queue->Release();
+    copy_queue->Release();
+
     dxgi_factory->Release();
     debug_interface_dx->Release();
     SDL_DestroyWindow(wnd);
