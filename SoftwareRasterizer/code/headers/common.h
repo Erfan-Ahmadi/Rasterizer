@@ -101,3 +101,17 @@ runtimeobject.lib
 #else
 #define ENABLE_DEBUG_LAYER 0
 #endif
+
+// Vertex/Index Buffer:
+struct Vertex {
+    float   pos[4];
+    uint8_t col[4];
+    float   uv[2];
+};
+
+using IndexType = uint16_t;
+
+struct Mesh {
+    std::vector<Vertex> vertices;
+    std::vector<IndexType> indices;
+};

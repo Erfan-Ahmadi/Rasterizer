@@ -69,6 +69,42 @@ public:
     }
 };
 
+void GetQuadMesh(Mesh * out) {
+    if(nullptr != out) {
+        out->vertices = std::vector<Vertex>({
+            {{ 1.0f, 1.0f, 0.0f}, {255, 0, 0, 255}, {1.0f, 1.0f}}, // RB?
+            {{ -1.0f,-1.0f, 0.0f}, {0, 255, 0, 255}, {0.0f, 0.0f}}, // LT?
+            {{ -1.0f, 1.0f, 0.0f}, {0, 0, 255, 255}, {0.0f, 1.0f}}, // LB?
+            {{ 1.0f, -1.0f, 0.0f}, {255, 255, 255, 255}, {1.0f, 0.0f}}, // RT?
+        });
+        
+        out->indices = std::vector<uint16_t>({
+            0, 1, 2, 0, 3, 1
+        });
+
+    } else {
+        ::printf("GetQuadMesh: out is nullptr");
+    }
+}
+void GetTriangleMesh(Mesh * out) {
+    if(nullptr != out) {
+        // TODO
+        out->vertices = std::vector<Vertex>({
+            {{ 1.0f, 1.0f, 0.0f}, {255, 0, 0, 255}, {1.0f, 1.0f}}, // RB?
+            {{ -1.0f,-1.0f, 0.0f}, {0, 255, 0, 255}, {0.0f, 0.0f}}, // LT?
+            {{ -1.0f, 1.0f, 0.0f}, {0, 0, 255, 255}, {0.0f, 1.0f}}, // LB?
+            {{ 1.0f, -1.0f, 0.0f}, {255, 255, 255, 255}, {1.0f, 0.0f}}, // RT?
+        });
+        
+        out->indices = std::vector<uint16_t>({
+            0, 1, 2, 0, 3, 1
+        });
+
+    } else {
+        ::printf("GetTriangleMesh: out is nullptr");
+    }
+}
+
 int main () 
 {
     // Configurable Options
@@ -156,6 +192,8 @@ int main ()
     ShaderCompileHelper shader_compiler = {};
     shader_compiler.init();
 
+    // ------------------------------------------ [BEGIN] Specific to a Demo ------------------------------------------
+
     IDxcBlob * vertex_shader = shader_compiler.compile_from_file(L"../code/src/shaders/simple_mesh.vert.hlsl", L"VSMain", L"vs_6_5");
     IDxcBlob * pixel_shader = shader_compiler.compile_from_file(L"../code/src/shaders/simple_mesh.frag.hlsl", L"PSMain", L"ps_6_5");
     ASSERT(nullptr != vertex_shader);
@@ -164,19 +202,49 @@ int main ()
     vertex_shader->Release();
     pixel_shader->Release();
 
+    Mesh triangle_mesh = {};
+    GetTriangleMesh(&triangle_mesh);
+    
+    ID3D12Resource * vertex_buffer = nullptr;
+    ID3D12Resource * index_buffer = nullptr;
+    size_t vertex_buffer_size = sizeof(Vertex) * triangle_mesh.vertices.size();
+    size_t index_buffer_size = sizeof(IndexType) * triangle_mesh.vertices.size();
+
+    CONSUME_VAR(vertex_buffer);
+    CONSUME_VAR(index_buffer);
+    CONSUME_VAR(vertex_buffer_size);
+    CONSUME_VAR(index_buffer_size);
+    // Vertex Buffer
+    {
+        //ID3D12Resource * staging_vertex_buffer = nullptr;
+        //d3d_device->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
+        //    D3D12_HEAP_FLAG_NONE,
+        //    &CD3DX12_RESOURCE_DESC::Buffer(vertex_buffer_size),
+        //    D3D12_RESOURCE_STATE_COPY_SOURCE,
+        //    nullptr,
+        //    IID_PPV_ARGS(&staging_vertex_buffer));
+    }
+    // Index Buffer 
+    {
+        // stage
+        // copy
+    }
+
     shader_compiler.exit();
 
-    // Shaders, RootSignatures, DescriptorHeaps etc...
-    // Graphics Pipeline Creation
-    // Memory Allocation in D3D12, Vertex/Index Buffers
     // Command Submission and Recording in D3D12
+    // RootSignatures, DescriptorHeaps etc...
+    // Graphics Pipeline Creation
     // Fence and Sync objects, Barriers
     // Main Loop and SDL Event Handling
+    // Draw The Triangle !
     // Try WARP
     // Integrate STB to Load Images
     // Texture Sampling Demo
-    // Abstract and Make Code Nicer and More Flexible
+    // Abstract and Make Code Nicer and More Flexible (DemoFramework?)
     // Compute Shader and SoftwareRasterizer Begin Design and Implementation
+    
+    // ------------------------------------------ [END] Specific to a Demo ------------------------------------------
 
     // Cleanup
     swap_chain->Release();
