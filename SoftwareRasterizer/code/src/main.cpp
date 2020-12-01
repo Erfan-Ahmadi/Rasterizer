@@ -227,25 +227,43 @@ int main ()
     ASSERT(nullptr != vertex_shader);
     ASSERT(nullptr != pixel_shader);
 
+    ID3DBlob * rs_blob = nullptr;
+    ID3DBlob * rs_error_blob = nullptr;
+    D3D12_VERSIONED_ROOT_SIGNATURE_DESC root_signature_desc = {};
+    root_signature_desc.Version = D3D_ROOT_SIGNATURE_VERSION_1_1;
+    root_signature_desc.Desc_1_1 = {};
+    res = D3D12SerializeVersionedRootSignature(&root_signature_desc, &rs_blob, &rs_error_blob);
+    CHECK_AND_FAIL(res);
+    if(nullptr != rs_error_blob) {
+        ASSERT(nullptr != rs_error_blob);
+        rs_error_blob->Release();
+    }
+
+    ID3D12RootSignature * root_signature = nullptr;
+    res = d3d_device->CreateRootSignature(0, rs_blob->GetBufferPointer(), rs_blob->GetBufferSize(), IID_PPV_ARGS(&root_signature));
+    CHECK_AND_FAIL(res);
+
+    root_signature->Release();
+    rs_blob->Release();
+
     // RootSignatures, DescriptorHeaps etc...
     // Graphics Pipeline Creation
 
     vertex_shader->Release();
     pixel_shader->Release();
 
-    Mesh triangle_mesh = {};
-    GetTriangleMesh(&triangle_mesh);
+    Mesh mesh = {};
+    GetQuadMesh(&mesh);
     
     ID3D12Resource * vertex_buffer = nullptr;
     ID3D12Resource * index_buffer = nullptr;
-    size_t vertex_buffer_size = sizeof(Vertex) * triangle_mesh.vertices.size();
-    size_t index_buffer_size = sizeof(IndexType) * triangle_mesh.indices.size();
+    size_t vertex_buffer_size = sizeof(Vertex) * mesh.vertices.size();
+    size_t index_buffer_size = sizeof(IndexType) * mesh.indices.size();
 
     CONSUME_VAR(index_buffer);
     CONSUME_VAR(index_buffer_size);
 
     // Vertex Buffer
-    if(false)
     {
         // Buffer Allocation
         D3D12_HEAP_PROPERTIES   heap_props      = GetDefaultHeapProps(D3D12_HEAP_TYPE_DEFAULT);
@@ -272,20 +290,83 @@ int main ()
         CHECK_AND_FAIL(res);
         
         // Copy to Buffer
-        copy_cmd_list->CopyBufferRegion(vertex_buffer, 0, staging_vertex_buffer, 0, vertex_buffer_size);
+        {
+            D3D12_RESOURCE_BARRIER barrier_before = {};
+            barrier_before.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+            barrier_before.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+            barrier_before.Transition.pResource = vertex_buffer;
+            barrier_before.Transition.StateBefore = D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER;
+            barrier_before.Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_DEST;
+            copy_cmd_list->ResourceBarrier(1, &barrier_before);
+
+            copy_cmd_list->CopyBufferRegion(vertex_buffer, 0, staging_vertex_buffer, 0, vertex_buffer_size);
+
+            D3D12_RESOURCE_BARRIER barrier_after = {};
+            barrier_after.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+            barrier_after.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+            barrier_after.Transition.pResource = vertex_buffer;
+            barrier_after.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
+            barrier_after.Transition.StateAfter = D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER;
+            copy_cmd_list->ResourceBarrier(1, &barrier_after);
+        }
 
         // Delete Staging Buffer
         staging_vertex_buffer->Release();
     }
     // Index Buffer 
     {
-        // stage
-        // copy
+        // Buffer Allocation
+        D3D12_HEAP_PROPERTIES   heap_props      = GetDefaultHeapProps(D3D12_HEAP_TYPE_DEFAULT);
+        D3D12_RESOURCE_DESC     resource_desc   = GetBufferResourceDesc(index_buffer_size);
+        res = d3d_device->CreateCommittedResource(&heap_props,
+            D3D12_HEAP_FLAG_NONE,
+            &resource_desc,
+            D3D12_RESOURCE_STATE_INDEX_BUFFER,
+            nullptr,
+            IID_PPV_ARGS(&index_buffer));
+        CHECK_AND_FAIL(res);
+
+        ID3D12Resource * staging_index_buffer = nullptr;
+
+        // Staging
+        D3D12_HEAP_PROPERTIES   staging_heap_props      = GetDefaultHeapProps(D3D12_HEAP_TYPE_UPLOAD);
+        D3D12_RESOURCE_DESC     staging_resource_desc   = GetBufferResourceDesc(index_buffer_size);
+        res = d3d_device->CreateCommittedResource(&staging_heap_props,
+            D3D12_HEAP_FLAG_NONE,
+            &staging_resource_desc,
+            D3D12_RESOURCE_STATE_GENERIC_READ | D3D12_RESOURCE_STATE_COPY_SOURCE,
+            nullptr,
+            IID_PPV_ARGS(&staging_index_buffer));
+        CHECK_AND_FAIL(res);
+        
+        // Copy to Buffer
+        {
+            D3D12_RESOURCE_BARRIER barrier_before = {};
+            barrier_before.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+            barrier_before.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+            barrier_before.Transition.pResource = index_buffer;
+            barrier_before.Transition.StateBefore = D3D12_RESOURCE_STATE_INDEX_BUFFER;
+            barrier_before.Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_DEST;
+            copy_cmd_list->ResourceBarrier(1, &barrier_before);
+
+            copy_cmd_list->CopyBufferRegion(index_buffer, 0, staging_index_buffer, 0, index_buffer_size);
+
+            D3D12_RESOURCE_BARRIER barrier_after = {};
+            barrier_after.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+            barrier_after.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+            barrier_after.Transition.pResource = index_buffer;
+            barrier_after.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
+            barrier_after.Transition.StateAfter = D3D12_RESOURCE_STATE_INDEX_BUFFER;
+            copy_cmd_list->ResourceBarrier(1, &barrier_after);
+        }
+
+        // Delete Staging Buffer
+        staging_index_buffer->Release();
     }
 
     shader_compiler.exit();
 
-    // Fence and Sync objects, Barriers
+    // Fence and Sync objects
     // Main Loop and SDL Event Handling
     // Draw The Triangle !
     // Try WARP
