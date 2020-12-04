@@ -168,7 +168,7 @@ int main ()
     }
     
     // Query Adapter (PhysicalDevice)
-    IDXGIFactory * dxgi_factory = nullptr;
+    IDXGIFactory4 * dxgi_factory = nullptr;
     CHECK_AND_FAIL(CreateDXGIFactory2(dxgiFactoryFlags, IID_PPV_ARGS(&dxgi_factory)));
 
     constexpr uint32_t MaxAdapters = 8;
@@ -215,25 +215,26 @@ int main ()
     CHECK_AND_FAIL(res);
 
     // Create Swapchain 
-    IDXGISwapChain * swap_chain = nullptr;
-    DXGI_SWAP_CHAIN_DESC swap_chain_desc = {};
-    swap_chain_desc.BufferDesc.Width = window_width;
-    swap_chain_desc.BufferDesc.Height = window_height;
-    swap_chain_desc.BufferDesc.RefreshRate = DXGI_RATIONAL {};
-    swap_chain_desc.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-    swap_chain_desc.BufferDesc.ScanlineOrdering = DXGI_MODE_SCANLINE_ORDER_UNSPECIFIED;
-    swap_chain_desc.BufferDesc.Scaling = DXGI_MODE_SCALING_UNSPECIFIED;
-    swap_chain_desc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+    IDXGISwapChain1 * swap_chain1 = nullptr;
+    IDXGISwapChain4 * swap_chain = nullptr;
+    DXGI_SWAP_CHAIN_DESC1 swap_chain_desc = {};
+    swap_chain_desc.Width = window_width;
+    swap_chain_desc.Height = window_height;
+    swap_chain_desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    swap_chain_desc.Stereo = FALSE;
     swap_chain_desc.SampleDesc.Count = 1;
     swap_chain_desc.SampleDesc.Quality = 0;
+    swap_chain_desc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
     swap_chain_desc.BufferCount = frame_queue_length;
-    swap_chain_desc.OutputWindow = hwnd;
-    swap_chain_desc.Windowed = true;
+    swap_chain_desc.Scaling = DXGI_SCALING_STRETCH;
     swap_chain_desc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+    swap_chain_desc.AlphaMode = DXGI_ALPHA_MODE_UNSPECIFIED;
     swap_chain_desc.Flags = (vsync_on) ? 0 : DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
-    res = dxgi_factory->CreateSwapChain(direct_queue, &swap_chain_desc, &swap_chain);
+    res = dxgi_factory->CreateSwapChainForHwnd(direct_queue, hwnd, &swap_chain_desc, nullptr, nullptr, &swap_chain1);
     CHECK_AND_FAIL(res);
-    
+
+    swap_chain = reinterpret_cast<IDXGISwapChain4 *>(swap_chain1);
+
     ShaderCompileHelper shader_compiler = {};
     shader_compiler.init();
 
@@ -363,11 +364,6 @@ int main ()
     size_t vertex_buffer_size = sizeof(Vertex) * mesh.vertices.size();
     size_t index_buffer_size = sizeof(IndexType) * mesh.indices.size();
 
-    //CONSUME_VAR(index_buffer);
-    //CONSUME_VAR(index_buffer_size);
-    //CONSUME_VAR(vertex_buffer);
-    //CONSUME_VAR(vertex_buffer_size);
-
     // Vertex Buffer
     {
         // Buffer Allocation
@@ -480,6 +476,10 @@ int main ()
 
     bool should_quit = false;
     uint32_t frame_index = 0;
+    uint32_t image_index = 0;
+    CONSUME_VAR(frame_index);
+    CONSUME_VAR(image_index);
+
     SDL_Event e;
     while(false == should_quit) {
         while(SDL_PollEvent(&e)) {
@@ -492,6 +492,8 @@ int main ()
         current_cmd_list->Reset(direct_cmd_allocator, nullptr);
         {
             current_cmd_list->SetGraphicsRootSignature(root_signature);
+            
+            image_index = swap_chain->GetCurrentBackBufferIndex();
 
             // Set Viewport Scissor
             {
@@ -511,6 +513,21 @@ int main ()
                 scissor_rect.bottom = window_height;
                 current_cmd_list->RSSetScissorRects(1, &scissor_rect);
             } 
+
+
+            // Transition RTV from D3D12_RESOURCE_STATE_PRESENT to D3D12_RESOURCE_STATE_RENDER_TARGET
+            
+            // OMSetRenderTargets
+
+            current_cmd_list->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+            // Set Vertex and Index Buffer
+            
+            // Draw Indexed
+            
+            // Transition RTV from D3D12_RESOURCE_STATE_RENDER_TARGET to D3D12_RESOURCE_STATE_PRESENT
+
+            swap_chain->Present(1, 0);
         }
         current_cmd_list->Close();
 
@@ -519,10 +536,13 @@ int main ()
 
         UINT64 wait_for_fence_val = frame_sync.fence_values[frame_index];
         direct_queue->Signal(frame_sync.fences[frame_index], wait_for_fence_val);
-        frame_sync.fence_values[frame_index]++;
 
-        frame_sync.fences[frame_index]->SetEventOnCompletion(wait_for_fence_val, frame_sync.events[frame_index]);
-        WaitForSingleObject(frame_sync.events[frame_index], INFINITE);
+        if(frame_sync.fences[frame_index]->GetCompletedValue() < frame_sync.fence_values[frame_index]) {
+            frame_sync.fences[frame_index]->SetEventOnCompletion(wait_for_fence_val, frame_sync.events[frame_index]);
+            WaitForSingleObject(frame_sync.events[frame_index], INFINITE);
+        }
+
+        frame_sync.fence_values[frame_index]++;
 
         if(frame_index >= frame_queue_length) {
             frame_index = 0;
