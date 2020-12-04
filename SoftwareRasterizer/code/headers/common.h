@@ -107,7 +107,7 @@ runtimeobject.lib
 struct Vertex {
     float   pos[3];
     float   col[4];
-    // float   uv[2];
+    float   uv[2];
 };
 
 

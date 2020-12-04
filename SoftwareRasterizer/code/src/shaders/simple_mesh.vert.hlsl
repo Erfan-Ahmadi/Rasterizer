@@ -2,7 +2,7 @@ struct VSInput
 {
     float4 Position	    	: POSITION0;
     float4 Col	        	: COLOR0;
-    // float2 UV				: TEXCOORD0;
+    float2 UV				: TEXCOORD0;
 };
 
 cbuffer WorldMat : register(b0, space2)
@@ -20,7 +20,7 @@ struct VSOutput
 {
     float4 Position     : SV_POSITION;
     float4 FragColor    : COLOR0;
-    // float2 UV			: TEXCOORD0;
+    float2 UV			: TEXCOORD0;
 };
 
 VSOutput VSMain(VSInput input)

@@ -72,9 +72,9 @@ public:
 void GetTriangleMesh(Mesh * out) {
     if(nullptr != out) {
         out->vertices = std::vector<Vertex>({
-            { { 0.0f,    0.4f,   0.0f }, {1.0f,   0,      0,      1.0f} }, // TOP
-            { { 0.25f,   -0.4f,  0.0f }, {0,      1.0f,   0,      1.0f} }, // LEFT
-            { { -0.25f,  -0.4f,  0.0f }, {0,      0,      1.0f,   1.0f} }, // RIGHT
+            { { 0.0f,    0.4f,   0.0f }, {1.0f,   0,      0,      1.0f}, {0.0f, 0.0f} }, // TOP
+            { { 0.25f,   -0.4f,  0.0f }, {0,      1.0f,   0,      1.0f}, {0.0f, 0.0f} }, // LEFT
+            { { -0.25f,  -0.4f,  0.0f }, {0,      0,      1.0f,   1.0f}, {0.0f, 0.0f} }, // RIGHT
         });
         
         out->indices = std::vector<IndexType>({
@@ -293,7 +293,7 @@ int main ()
 
     ID3D12PipelineState * graphics_pso = nullptr;
     {
-        constexpr uint32_t VertexInputElemCount = 2;
+        constexpr uint32_t VertexInputElemCount = 3;
         D3D12_INPUT_ELEMENT_DESC vertex_layout[VertexInputElemCount] = {};
         vertex_layout[0].SemanticName = "POSITION";
         vertex_layout[0].SemanticIndex = 0;
@@ -311,13 +311,13 @@ int main ()
         vertex_layout[1].InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
         vertex_layout[1].InstanceDataStepRate = 0;
         //
-        //vertex_layout[2].SemanticName = "TEXCOORD";
-        //vertex_layout[2].SemanticIndex = 0;
-        //vertex_layout[2].Format = DXGI_FORMAT_R32G32_FLOAT;
-        //vertex_layout[2].InputSlot = 0;
-        //vertex_layout[2].AlignedByteOffset = offsetof(Vertex, uv);
-        //vertex_layout[2].InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
-        //vertex_layout[2].InstanceDataStepRate = 0;
+        vertex_layout[2].SemanticName = "TEXCOORD";
+        vertex_layout[2].SemanticIndex = 0;
+        vertex_layout[2].Format = DXGI_FORMAT_R32G32_FLOAT;
+        vertex_layout[2].InputSlot = 0;
+        vertex_layout[2].AlignedByteOffset = offsetof(Vertex, uv);
+        vertex_layout[2].InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
+        vertex_layout[2].InstanceDataStepRate = 0;
 
         D3D12_GRAPHICS_PIPELINE_STATE_DESC pso_desc = {};
         pso_desc.pRootSignature = root_signature;
@@ -608,8 +608,7 @@ int main ()
             current_cmd_list->SetPipelineState(graphics_pso);
 
             // Draw Indexed
-            // current_cmd_list->DrawIndexedInstanced((uint32_t)mesh.indices.size(), 1, 0, 0, 0);
-            current_cmd_list->DrawInstanced((uint32_t)mesh.vertices.size(), 1, 0, 0);
+            current_cmd_list->DrawIndexedInstanced((uint32_t)mesh.indices.size(), 1, 0, 0, 0);
 
             // Transition RTV from D3D12_RESOURCE_STATE_RENDER_TARGET to D3D12_RESOURCE_STATE_PRESENT
             D3D12_RESOURCE_BARRIER barrier_before_present = {};
