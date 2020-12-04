@@ -105,6 +105,32 @@ void GetTriangleMesh(Mesh * out) {
     }
 }
 
+struct {
+    ID3D12Fence * fences[frame_queue_length] = {};
+    HANDLE events[frame_queue_length] = {};
+    UINT64 fence_values[frame_queue_length] = {};
+
+    void Init(ID3D12Device * d3d_device) {
+        for(uint32_t f = 0; f < frame_queue_length; ++f) {
+            HRESULT res = d3d_device->CreateFence(fence_values[f], D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fences[f]));
+            CHECK_AND_FAIL(res);
+            fence_values[f]++;
+            events[f] = CreateEvent(nullptr, FALSE, FALSE, nullptr);
+            if(nullptr == events[f]) {
+                res = HRESULT_FROM_WIN32(GetLastError());
+                CHECK_AND_FAIL(res);
+            }
+        }
+    }
+
+    void Release() {
+        for(uint32_t f = 0; f < frame_queue_length; ++f) {
+            fences[f]->Release();
+            CloseHandle(events[f]);
+        }
+    }
+} frame_sync;
+
 int main () 
 {
     // Configurable Options
@@ -126,7 +152,12 @@ int main ()
 #endif
 
     // Create a Window
-    SDL_Window * wnd = SDL_CreateWindow("LearningD3D12", 100, 100, window_width, window_height, 0);
+    SDL_Window * wnd = SDL_CreateWindow(
+        "Rasterizer",
+        SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+        window_width, window_height,
+        0);
+
     SDL_SysWMinfo wmInfo;
     SDL_VERSION(&wmInfo.version);
     SDL_bool sdl_res = SDL_GetWindowWMInfo(wnd, &wmInfo);
@@ -445,6 +476,8 @@ int main ()
 
     shader_compiler.exit();
 
+    frame_sync.Init(d3d_device);
+
     bool should_quit = false;
     uint32_t frame_index = 0;
     SDL_Event e;
@@ -455,13 +488,49 @@ int main ()
             }
         }
 
+        ID3D12GraphicsCommandList * current_cmd_list = direct_cmd_list[frame_index];
+        current_cmd_list->Reset(direct_cmd_allocator, nullptr);
+        {
+            current_cmd_list->SetGraphicsRootSignature(root_signature);
+
+            // Set Viewport Scissor
+            {
+                D3D12_VIEWPORT viewport;
+                viewport.TopLeftX = 0;
+                viewport.TopLeftY = 0;
+                viewport.Width = (FLOAT)window_width;
+                viewport.Height = (FLOAT)window_height;
+                viewport.MinDepth = 0.0f;
+                viewport.MaxDepth = 1.0f;
+                current_cmd_list->RSSetViewports(1, &viewport);
+
+                D3D12_RECT scissor_rect = {};
+                scissor_rect.left = 0;
+                scissor_rect.top = 0;
+                scissor_rect.right = window_width;
+                scissor_rect.bottom = window_height;
+                current_cmd_list->RSSetScissorRects(1, &scissor_rect);
+            } 
+        }
+        current_cmd_list->Close();
+
+        ID3D12CommandList * execute_cmds[1] = { current_cmd_list };
+        direct_queue->ExecuteCommandLists(1, execute_cmds);
+
+        UINT64 wait_for_fence_val = frame_sync.fence_values[frame_index];
+        direct_queue->Signal(frame_sync.fences[frame_index], wait_for_fence_val);
+        frame_sync.fence_values[frame_index]++;
+
+        frame_sync.fences[frame_index]->SetEventOnCompletion(wait_for_fence_val, frame_sync.events[frame_index]);
+        WaitForSingleObject(frame_sync.events[frame_index], INFINITE);
+
         if(frame_index >= frame_queue_length) {
             frame_index = 0;
         }
     }
 
-    // Fence and Sync objects
-    // Main Loop and SDL Event Handling
+    frame_sync.Release();
+
     // Draw The Triangle !
     // Try WARP
     // Integrate STB to Load Images
