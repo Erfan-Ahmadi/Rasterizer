@@ -72,9 +72,9 @@ public:
 void GetTriangleMesh(Mesh * out) {
     if(nullptr != out) {
         out->vertices = std::vector<Vertex>({
-            { { 0.0f,    0.4f,   0.0f }, {1.0f,   0,      0,      1.0f}, {0.0f, 0.0f} }, // TOP
-            { { 0.25f,   -0.4f,  0.0f }, {0,      1.0f,   0,      1.0f}, {0.0f, 0.0f} }, // LEFT
-            { { -0.25f,  -0.4f,  0.0f }, {0,      0,      1.0f,   1.0f}, {0.0f, 0.0f} }, // RIGHT
+            { { 0.0f,    0.4f,   0.0f }, {0.8f,   0.0f,   0.6f,   1.0f}, {0.0f, 0.0f} }, // TOP
+            { { 0.25f,   -0.4f,  0.0f }, {0.1f,   0.6f,   0.4f,   1.0f}, {0.0f, 0.0f} }, // LEFT
+            { { -0.25f,  -0.4f,  0.0f }, {0,      0.5f,   1.0f,   1.0f}, {0.0f, 0.0f} }, // RIGHT
         });
         
         out->indices = std::vector<IndexType>({
@@ -585,8 +585,8 @@ int main ()
 
             // Set RenderTargets
             current_cmd_list->OMSetRenderTargets(1, &rtv_handle, FALSE, nullptr);
-            const float clearColor[] = { 0.0f, 0.2f, 0.4f, 1.0f };
-            current_cmd_list->ClearRenderTargetView(rtv_handle, clearColor, 0, nullptr);
+            const float clear_color[] = { 0.0f, 0.05f, 0.05f, 1.0f };
+            current_cmd_list->ClearRenderTargetView(rtv_handle, clear_color, 0, nullptr);
 
             current_cmd_list->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
