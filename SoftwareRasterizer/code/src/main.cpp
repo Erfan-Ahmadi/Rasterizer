@@ -412,7 +412,14 @@ int main ()
             nullptr,
             IID_PPV_ARGS(&staging_vertex_buffer));
         CHECK_AND_FAIL(res);
-        
+
+        D3D12_RANGE read_range = {}; read_range.Begin = 0; read_range.End = 0;
+        using Byte = uint8_t;
+        Byte * vertex_data_begin = nullptr;
+        staging_vertex_buffer->Map(0, &read_range, reinterpret_cast<void**>(&vertex_data_begin));
+        memcpy(vertex_data_begin, mesh.vertices.data(), sizeof(Vertex) * mesh.vertices.size());
+        staging_vertex_buffer->Unmap(0, nullptr);
+
         // Copy to Buffer
         {
             D3D12_RESOURCE_BARRIER barrier_before = {};
@@ -464,7 +471,14 @@ int main ()
             nullptr,
             IID_PPV_ARGS(&staging_index_buffer));
         CHECK_AND_FAIL(res);
-        
+
+        D3D12_RANGE read_range = {}; read_range.Begin = 0; read_range.End = 0;
+        using Byte = uint8_t;
+        Byte * index_data_begin = nullptr;
+        staging_index_buffer->Map(0, &read_range, reinterpret_cast<void**>(&index_data_begin));
+        memcpy(index_data_begin, mesh.indices.data(), sizeof(IndexType) * mesh.indices.size());
+        staging_index_buffer->Unmap(0, nullptr);
+
         // Copy to Buffer
         {
             D3D12_RESOURCE_BARRIER barrier_before = {};
