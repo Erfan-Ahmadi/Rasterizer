@@ -262,6 +262,30 @@ int main ()
         CHECK_AND_FAIL(res);
     }
 
+    // Create RTV DesriptorHeap for SwapChain RenderTargets
+    ID3D12DescriptorHeap * rtv_heap = nullptr;
+    {
+        D3D12_DESCRIPTOR_HEAP_DESC heap_desc = {};
+        heap_desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
+        heap_desc.NumDescriptors = frame_queue_length;
+        heap_desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+        heap_desc.NodeMask = 0;
+
+        d3d_device->CreateDescriptorHeap(&heap_desc, IID_PPV_ARGS(&rtv_heap));
+    }
+    
+    // SwapChain RenderTargets
+    ID3D12Resource * swap_chain_render_targets[frame_queue_length];
+
+    // Create RTVs into Heap
+    D3D12_CPU_DESCRIPTOR_HANDLE current_rtv_handle = rtv_heap->GetCPUDescriptorHandleForHeapStart();
+    uint32_t rtv_handle_increment_size = d3d_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+    for(uint32_t n = 0; n < frame_queue_length; ++n) {
+        swap_chain->GetBuffer(n, IID_PPV_ARGS(&swap_chain_render_targets[n]));
+        d3d_device->CreateRenderTargetView(swap_chain_render_targets[n], nullptr, current_rtv_handle);
+        current_rtv_handle.ptr = SIZE_T(current_rtv_handle.ptr + INT64(rtv_handle_increment_size));
+    }
+
     IDxcBlob * vertex_shader = shader_compiler.compile_from_file(L"../code/src/shaders/simple_mesh.vert.hlsl", L"VSMain", L"vs_6_0");
     IDxcBlob * pixel_shader = shader_compiler.compile_from_file(L"../code/src/shaders/simple_mesh.frag.hlsl", L"PSMain", L"ps_6_0");
     ASSERT(nullptr != vertex_shader);
@@ -285,73 +309,72 @@ int main ()
     CHECK_AND_FAIL(res);
 
     ID3D12PipelineState * graphics_pso = nullptr;
+    {
+        constexpr uint32_t VertexInputElemCount = 3;
+        D3D12_INPUT_ELEMENT_DESC vertex_layout[VertexInputElemCount] = {};
+        vertex_layout[0].SemanticName = "POSITION";
+        vertex_layout[0].SemanticIndex = 0;
+        vertex_layout[0].Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
+        vertex_layout[0].InputSlot = 0;
+        vertex_layout[0].AlignedByteOffset = 0;
+        vertex_layout[0].InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
+        vertex_layout[0].InstanceDataStepRate = 0;
+        //
+        vertex_layout[1].SemanticName = "COLOR";
+        vertex_layout[1].SemanticIndex = 0;
+        vertex_layout[1].Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        vertex_layout[1].InputSlot = 1;
+        vertex_layout[1].AlignedByteOffset = offsetof(Vertex, col);
+        vertex_layout[1].InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
+        vertex_layout[1].InstanceDataStepRate = 0;
+        //
+        vertex_layout[2].SemanticName = "TEXCOORD";
+        vertex_layout[2].SemanticIndex = 0;
+        vertex_layout[2].Format = DXGI_FORMAT_R32G32_FLOAT;
+        vertex_layout[2].InputSlot = 2;
+        vertex_layout[2].AlignedByteOffset = offsetof(Vertex, uv);
+        vertex_layout[2].InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
+        vertex_layout[2].InstanceDataStepRate = 0;
 
-    constexpr uint32_t VertexInputElemCount = 3;
-    D3D12_INPUT_ELEMENT_DESC vertex_layout[VertexInputElemCount] = {};
-    vertex_layout[0].SemanticName = "POSITION";
-    vertex_layout[0].SemanticIndex = 0;
-    vertex_layout[0].Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
-    vertex_layout[0].InputSlot = 0;
-    vertex_layout[0].AlignedByteOffset = 0;
-    vertex_layout[0].InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
-    vertex_layout[0].InstanceDataStepRate = 0;
-    //
-    vertex_layout[1].SemanticName = "COLOR";
-    vertex_layout[1].SemanticIndex = 0;
-    vertex_layout[1].Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-    vertex_layout[1].InputSlot = 1;
-    vertex_layout[1].AlignedByteOffset = offsetof(Vertex, col);
-    vertex_layout[1].InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
-    vertex_layout[1].InstanceDataStepRate = 0;
-    //
-    vertex_layout[2].SemanticName = "TEXCOORD";
-    vertex_layout[2].SemanticIndex = 0;
-    vertex_layout[2].Format = DXGI_FORMAT_R32G32_FLOAT;
-    vertex_layout[2].InputSlot = 2;
-    vertex_layout[2].AlignedByteOffset = offsetof(Vertex, uv);
-    vertex_layout[2].InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
-    vertex_layout[2].InstanceDataStepRate = 0;
+        D3D12_GRAPHICS_PIPELINE_STATE_DESC pso_desc = {};
+        pso_desc.pRootSignature = root_signature;
+        pso_desc.VS.pShaderBytecode = vertex_shader->GetBufferPointer();
+        pso_desc.VS.BytecodeLength = vertex_shader->GetBufferSize();
+        pso_desc.PS.pShaderBytecode = pixel_shader->GetBufferPointer();
+        pso_desc.PS.BytecodeLength = pixel_shader->GetBufferSize();
+        pso_desc.BlendState = {};
+        pso_desc.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
+        pso_desc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
+        pso_desc.RasterizerState.FrontCounterClockwise = FALSE;
+        pso_desc.RasterizerState.DepthBias = 0;
+        pso_desc.RasterizerState.DepthBiasClamp = 0;
+        pso_desc.RasterizerState.SlopeScaledDepthBias = 0;
+        pso_desc.RasterizerState.DepthClipEnable = FALSE;
+        pso_desc.RasterizerState.MultisampleEnable = FALSE;
+        pso_desc.RasterizerState.AntialiasedLineEnable = FALSE;
+        pso_desc.RasterizerState.ForcedSampleCount = FALSE;
+        pso_desc.RasterizerState.ConservativeRaster = D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF;
+        pso_desc.SampleMask = 0;
+        pso_desc.DepthStencilState.DepthEnable = FALSE;
+        pso_desc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
+        pso_desc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_LESS;
+        pso_desc.DepthStencilState.StencilEnable = FALSE;
+        pso_desc.InputLayout.pInputElementDescs = vertex_layout;
+        pso_desc.InputLayout.NumElements = VertexInputElemCount;
+        pso_desc.IBStripCutValue = D3D12_INDEX_BUFFER_STRIP_CUT_VALUE_DISABLED;
+        pso_desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+        pso_desc.NumRenderTargets = 1;
+        pso_desc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
+        pso_desc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
+        pso_desc.SampleDesc.Count = 1;
+        pso_desc.SampleDesc.Quality = 0;
+        pso_desc.NodeMask = 0;
+        pso_desc.CachedPSO = {};
+        pso_desc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
+        res = d3d_device->CreateGraphicsPipelineState(&pso_desc, IID_PPV_ARGS(&graphics_pso)); CHECK_AND_FAIL(res);
+    }
 
-    D3D12_GRAPHICS_PIPELINE_STATE_DESC pso_desc = {};
-    pso_desc.pRootSignature = root_signature;
-    pso_desc.VS.pShaderBytecode = vertex_shader->GetBufferPointer();
-    pso_desc.VS.BytecodeLength = vertex_shader->GetBufferSize();
-    pso_desc.PS.pShaderBytecode = pixel_shader->GetBufferPointer();
-    pso_desc.PS.BytecodeLength = pixel_shader->GetBufferSize();
-    pso_desc.BlendState = {};
-    pso_desc.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
-    pso_desc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
-    pso_desc.RasterizerState.FrontCounterClockwise = FALSE;
-    pso_desc.RasterizerState.DepthBias = 0;
-    pso_desc.RasterizerState.DepthBiasClamp = 0;
-    pso_desc.RasterizerState.SlopeScaledDepthBias = 0;
-    pso_desc.RasterizerState.DepthClipEnable = FALSE;
-    pso_desc.RasterizerState.MultisampleEnable = FALSE;
-    pso_desc.RasterizerState.AntialiasedLineEnable = FALSE;
-    pso_desc.RasterizerState.ForcedSampleCount = FALSE;
-    pso_desc.RasterizerState.ConservativeRaster = D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF;
-    pso_desc.SampleMask = 0;
-    pso_desc.DepthStencilState.DepthEnable = FALSE;
-    pso_desc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
-    pso_desc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_LESS;
-    pso_desc.DepthStencilState.StencilEnable = FALSE;
-    pso_desc.InputLayout.pInputElementDescs = vertex_layout;
-    pso_desc.InputLayout.NumElements = VertexInputElemCount;
-    pso_desc.IBStripCutValue = D3D12_INDEX_BUFFER_STRIP_CUT_VALUE_DISABLED;
-    pso_desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
-    pso_desc.NumRenderTargets = 1;
-    pso_desc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
-    pso_desc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
-    pso_desc.SampleDesc.Count = 1;
-    pso_desc.SampleDesc.Quality = 0;
-    pso_desc.NodeMask = 0;
-    pso_desc.CachedPSO = {};
-    pso_desc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
-    res = d3d_device->CreateGraphicsPipelineState(&pso_desc, IID_PPV_ARGS(&graphics_pso)); CHECK_AND_FAIL(res);
     rs_blob->Release();
-
-    // RootSignatures, DescriptorHeaps etc...
-    // Graphics Pipeline Creation
 
     vertex_shader->Release();
     pixel_shader->Release();
@@ -514,25 +537,58 @@ int main ()
                 current_cmd_list->RSSetScissorRects(1, &scissor_rect);
             } 
 
+            D3D12_CPU_DESCRIPTOR_HANDLE rtv_handle = rtv_heap->GetCPUDescriptorHandleForHeapStart();
+            rtv_handle.ptr = rtv_handle.ptr + SIZE_T(image_index * rtv_handle_increment_size);
 
-            // Transition RTV from D3D12_RESOURCE_STATE_PRESENT to D3D12_RESOURCE_STATE_RENDER_TARGET
-            
-            // OMSetRenderTargets
+            // Transition RTV from D3D12_RESOURCE_STATE_PRESENT to D3D12_RESOURCE_STATE_RENDER_TARGET.
+            D3D12_RESOURCE_BARRIER barrier_before_render = {};
+            barrier_before_render.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+            barrier_before_render.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+            barrier_before_render.Transition.pResource = swap_chain_render_targets[image_index];
+            barrier_before_render.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
+            barrier_before_render.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
+            current_cmd_list->ResourceBarrier(1, &barrier_before_render);
+
+            // Set RenderTargets
+            current_cmd_list->OMSetRenderTargets(1, &rtv_handle, FALSE, nullptr);
 
             current_cmd_list->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
             // Set Vertex and Index Buffer
-            
+            D3D12_VERTEX_BUFFER_VIEW vbv = {};
+            vbv.BufferLocation = vertex_buffer->GetGPUVirtualAddress();
+            vbv.SizeInBytes = (uint32_t)vertex_buffer_size;
+            vbv.StrideInBytes = sizeof(Vertex);
+            current_cmd_list->IASetVertexBuffers(0, 1, &vbv);
+
+            D3D12_INDEX_BUFFER_VIEW ibv = {};
+            ibv.BufferLocation = index_buffer->GetGPUVirtualAddress();
+            ibv.Format = IndexBufferFormat;
+            ibv.SizeInBytes = (uint32_t)index_buffer_size;
+            current_cmd_list->IASetIndexBuffer(&ibv);
+
+            // Set PSO
+            current_cmd_list->SetPipelineState(graphics_pso);
+
             // Draw Indexed
+            current_cmd_list->DrawIndexedInstanced((uint32_t)mesh.indices.size(), 1, 0, 0, 0);
             
             // Transition RTV from D3D12_RESOURCE_STATE_RENDER_TARGET to D3D12_RESOURCE_STATE_PRESENT
-
-            swap_chain->Present(1, 0);
+            D3D12_RESOURCE_BARRIER barrier_before_present = {};
+            barrier_before_present.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+            barrier_before_present.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+            barrier_before_present.Transition.pResource = swap_chain_render_targets[image_index];
+            barrier_before_present.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
+            barrier_before_present.Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
+            current_cmd_list->ResourceBarrier(1, &barrier_before_present);
         }
         current_cmd_list->Close();
 
         ID3D12CommandList * execute_cmds[1] = { current_cmd_list };
         direct_queue->ExecuteCommandLists(1, execute_cmds);
+        
+        // Present the frame.
+        swap_chain->Present(1, 0);
 
         UINT64 wait_for_fence_val = frame_sync.fence_values[frame_index];
         direct_queue->Signal(frame_sync.fences[frame_index], wait_for_fence_val);
@@ -551,18 +607,22 @@ int main ()
 
     frame_sync.Release();
 
-    // Draw The Triangle !
+    // Abstract and Make Code Nicer and More Flexible (DemoFramework?)
     // Try WARP
     // Integrate STB to Load Images
     // Texture Sampling Demo
-    // Abstract and Make Code Nicer and More Flexible (DemoFramework?)
     // Compute Shader and SoftwareRasterizer Begin Design and Implementation
-    
     root_signature->Release();
     graphics_pso->Release();
 
     vertex_buffer->Release();
     index_buffer->Release();
+
+    for(uint32_t n = 0; n < frame_queue_length; ++n) {
+        swap_chain_render_targets[n]->Release();
+    }
+
+    rtv_heap->Release();
 
     copy_cmd_list->Release();
     for(uint32_t i = 0; i < frame_queue_length; ++i) {

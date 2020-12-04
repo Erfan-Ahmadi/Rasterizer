@@ -110,7 +110,9 @@ struct Vertex {
     float   uv[2];
 };
 
+
 using IndexType = uint16_t;
+static DXGI_FORMAT IndexBufferFormat = DXGI_FORMAT_R16_UINT;
 
 struct Mesh {
     std::vector<Vertex> vertices;
