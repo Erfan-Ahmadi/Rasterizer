@@ -69,35 +69,16 @@ public:
     }
 };
 
-void GetQuadMesh(Mesh * out) {
-    if(nullptr != out) {
-        out->vertices = std::vector<Vertex>({
-            {{ 1.0f, 1.0f, 0.0f}, {255, 0, 0, 255}, {1.0f, 1.0f}}, // RB?
-            {{ -1.0f,-1.0f, 0.0f}, {0, 255, 0, 255}, {0.0f, 0.0f}}, // LT?
-            {{ -1.0f, 1.0f, 0.0f}, {0, 0, 255, 255}, {0.0f, 1.0f}}, // LB?
-            {{ 1.0f, -1.0f, 0.0f}, {255, 255, 255, 255}, {1.0f, 0.0f}}, // RT?
-        });
-        
-        out->indices = std::vector<IndexType>({
-            0, 1, 2, 0, 3, 1
-        });
-
-    } else {
-        ::printf("GetQuadMesh: out is nullptr");
-    }
-}
 void GetTriangleMesh(Mesh * out) {
     if(nullptr != out) {
-        // TODO
         out->vertices = std::vector<Vertex>({
-            {{ 1.0f, 1.0f, 0.0f}, {255, 0, 0, 255}, {1.0f, 1.0f}}, // RB?
-            {{ -1.0f,-1.0f, 0.0f}, {0, 255, 0, 255}, {0.0f, 0.0f}}, // LT?
-            {{ -1.0f, 1.0f, 0.0f}, {0, 0, 255, 255}, {0.0f, 1.0f}}, // LB?
-            {{ 1.0f, -1.0f, 0.0f}, {255, 255, 255, 255}, {1.0f, 0.0f}}, // RT?
+            { { 0.0f,    0.4f,   0.0f }, {1.0f,   0,      0,      1.0f} }, // TOP
+            { { 0.25f,   -0.4f,  0.0f }, {0,      1.0f,   0,      1.0f} }, // LEFT
+            { { -0.25f,  -0.4f,  0.0f }, {0,      0,      1.0f,   1.0f} }, // RIGHT
         });
         
         out->indices = std::vector<IndexType>({
-            0, 1, 2, 0, 3, 1
+            0, 1, 2,
         });
 
     } else {
@@ -129,7 +110,7 @@ struct {
             CloseHandle(events[f]);
         }
     }
-} frame_sync;
+} sync;
 
 int main () 
 {
@@ -261,6 +242,8 @@ int main ()
         direct_cmd_list[i]->Close();
         CHECK_AND_FAIL(res);
     }
+    
+    sync.Init(d3d_device);
 
     // Create RTV DesriptorHeap for SwapChain RenderTargets
     ID3D12DescriptorHeap * rtv_heap = nullptr;
@@ -310,11 +293,11 @@ int main ()
 
     ID3D12PipelineState * graphics_pso = nullptr;
     {
-        constexpr uint32_t VertexInputElemCount = 3;
+        constexpr uint32_t VertexInputElemCount = 2;
         D3D12_INPUT_ELEMENT_DESC vertex_layout[VertexInputElemCount] = {};
         vertex_layout[0].SemanticName = "POSITION";
         vertex_layout[0].SemanticIndex = 0;
-        vertex_layout[0].Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
+        vertex_layout[0].Format = DXGI_FORMAT_R32G32B32_FLOAT;
         vertex_layout[0].InputSlot = 0;
         vertex_layout[0].AlignedByteOffset = 0;
         vertex_layout[0].InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
@@ -322,19 +305,19 @@ int main ()
         //
         vertex_layout[1].SemanticName = "COLOR";
         vertex_layout[1].SemanticIndex = 0;
-        vertex_layout[1].Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        vertex_layout[1].Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
         vertex_layout[1].InputSlot = 0;
         vertex_layout[1].AlignedByteOffset = offsetof(Vertex, col);
         vertex_layout[1].InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
         vertex_layout[1].InstanceDataStepRate = 0;
         //
-        vertex_layout[2].SemanticName = "TEXCOORD";
-        vertex_layout[2].SemanticIndex = 0;
-        vertex_layout[2].Format = DXGI_FORMAT_R32G32_FLOAT;
-        vertex_layout[2].InputSlot = 0;
-        vertex_layout[2].AlignedByteOffset = offsetof(Vertex, uv);
-        vertex_layout[2].InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
-        vertex_layout[2].InstanceDataStepRate = 0;
+        //vertex_layout[2].SemanticName = "TEXCOORD";
+        //vertex_layout[2].SemanticIndex = 0;
+        //vertex_layout[2].Format = DXGI_FORMAT_R32G32_FLOAT;
+        //vertex_layout[2].InputSlot = 0;
+        //vertex_layout[2].AlignedByteOffset = offsetof(Vertex, uv);
+        //vertex_layout[2].InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
+        //vertex_layout[2].InstanceDataStepRate = 0;
 
         D3D12_GRAPHICS_PIPELINE_STATE_DESC pso_desc = {};
         pso_desc.pRootSignature = root_signature;
@@ -342,19 +325,32 @@ int main ()
         pso_desc.VS.BytecodeLength = vertex_shader->GetBufferSize();
         pso_desc.PS.pShaderBytecode = pixel_shader->GetBufferPointer();
         pso_desc.PS.BytecodeLength = pixel_shader->GetBufferSize();
-        pso_desc.BlendState = {};
+        pso_desc.BlendState.AlphaToCoverageEnable = FALSE;
+        pso_desc.BlendState.IndependentBlendEnable = FALSE;
+
+        const D3D12_RENDER_TARGET_BLEND_DESC defaultRenderTargetBlendDesc =
+        {
+            FALSE,FALSE,
+            D3D12_BLEND_ONE, D3D12_BLEND_ZERO, D3D12_BLEND_OP_ADD,
+            D3D12_BLEND_ONE, D3D12_BLEND_ZERO, D3D12_BLEND_OP_ADD,
+            D3D12_LOGIC_OP_NOOP,
+            D3D12_COLOR_WRITE_ENABLE_ALL,
+        };
+        for (UINT i = 0; i < D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT; ++i)
+            pso_desc.BlendState.RenderTarget[i] = defaultRenderTargetBlendDesc;
+
         pso_desc.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
-        pso_desc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
+        pso_desc.RasterizerState.CullMode = D3D12_CULL_MODE_BACK;
         pso_desc.RasterizerState.FrontCounterClockwise = FALSE;
         pso_desc.RasterizerState.DepthBias = 0;
-        pso_desc.RasterizerState.DepthBiasClamp = 0;
-        pso_desc.RasterizerState.SlopeScaledDepthBias = 0;
-        pso_desc.RasterizerState.DepthClipEnable = FALSE;
+        pso_desc.RasterizerState.DepthBiasClamp = 0.0f;
+        pso_desc.RasterizerState.SlopeScaledDepthBias = 0.0f;
+        pso_desc.RasterizerState.DepthClipEnable = TRUE;
         pso_desc.RasterizerState.MultisampleEnable = FALSE;
         pso_desc.RasterizerState.AntialiasedLineEnable = FALSE;
-        pso_desc.RasterizerState.ForcedSampleCount = FALSE;
+        pso_desc.RasterizerState.ForcedSampleCount = 0;
         pso_desc.RasterizerState.ConservativeRaster = D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF;
-        pso_desc.SampleMask = 0;
+        pso_desc.SampleMask = UINT_MAX;
         pso_desc.DepthStencilState.DepthEnable = FALSE;
         pso_desc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
         pso_desc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_LESS;
@@ -365,7 +361,7 @@ int main ()
         pso_desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
         pso_desc.NumRenderTargets = 1;
         pso_desc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
-        pso_desc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
+        pso_desc.DSVFormat = DXGI_FORMAT_UNKNOWN;
         pso_desc.SampleDesc.Count = 1;
         pso_desc.SampleDesc.Quality = 0;
         pso_desc.NodeMask = 0;
@@ -380,7 +376,7 @@ int main ()
     pixel_shader->Release();
 
     Mesh mesh = {};
-    GetQuadMesh(&mesh);
+    GetTriangleMesh(&mesh);
     
     ID3D12Resource * vertex_buffer = nullptr;
     ID3D12Resource * index_buffer = nullptr;
@@ -416,9 +412,9 @@ int main ()
         D3D12_RANGE read_range = {}; read_range.Begin = 0; read_range.End = 0;
         using Byte = uint8_t;
         Byte * vertex_data_begin = nullptr;
-        staging_vertex_buffer->Map(0, &read_range, reinterpret_cast<void**>(&vertex_data_begin));
+        res = staging_vertex_buffer->Map(0, &read_range, reinterpret_cast<void**>(&vertex_data_begin)); CHECK_AND_FAIL(res);
         memcpy(vertex_data_begin, mesh.vertices.data(), vertex_buffer_bytes);
-        staging_vertex_buffer->Unmap(0, nullptr);
+        staging_vertex_buffer->Unmap(0, nullptr); 
 
         // Copy to Buffer
         {
@@ -441,6 +437,19 @@ int main ()
             barrier_after.Transition.StateAfter = D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER;
             direct_cmd_list[0]->ResourceBarrier(1, &barrier_after);
             direct_cmd_list[0]->Close();
+            
+            ID3D12CommandList * execute_cmds[1] = { direct_cmd_list[0] };
+            direct_queue->ExecuteCommandLists(1, execute_cmds);
+
+            UINT64 wait_for_fence_val = sync.fence_values[0];
+            direct_queue->Signal(sync.fences[0], wait_for_fence_val);
+
+            if(sync.fences[0]->GetCompletedValue() < sync.fence_values[0]) {
+                sync.fences[0]->SetEventOnCompletion(wait_for_fence_val, sync.events[0]);
+                WaitForSingleObject(sync.events[0], INFINITE);
+            }
+
+            sync.fence_values[0]++;
         }
 
         // Delete Staging Buffer
@@ -501,6 +510,19 @@ int main ()
             barrier_after.Transition.StateAfter = D3D12_RESOURCE_STATE_INDEX_BUFFER;
             direct_cmd_list[0]->ResourceBarrier(1, &barrier_after);
             direct_cmd_list[0]->Close();
+            
+            ID3D12CommandList * execute_cmds[1] = { direct_cmd_list[0] };
+            direct_queue->ExecuteCommandLists(1, execute_cmds);
+
+            UINT64 wait_for_fence_val = sync.fence_values[0];
+            direct_queue->Signal(sync.fences[0], wait_for_fence_val);
+
+            if(sync.fences[0]->GetCompletedValue() < sync.fence_values[0]) {
+                sync.fences[0]->SetEventOnCompletion(wait_for_fence_val, sync.events[0]);
+                WaitForSingleObject(sync.events[0], INFINITE);
+            }
+
+            sync.fence_values[0]++;
         }
 
         // Delete Staging Buffer
@@ -508,8 +530,6 @@ int main ()
     }
 
     shader_compiler.exit();
-
-    frame_sync.Init(d3d_device);
 
     bool should_quit = false;
     uint32_t frame_index = 0;
@@ -565,6 +585,8 @@ int main ()
 
             // Set RenderTargets
             current_cmd_list->OMSetRenderTargets(1, &rtv_handle, FALSE, nullptr);
+            const float clearColor[] = { 0.0f, 0.2f, 0.4f, 1.0f };
+            current_cmd_list->ClearRenderTargetView(rtv_handle, clearColor, 0, nullptr);
 
             current_cmd_list->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
@@ -580,14 +602,15 @@ int main ()
             ibv.BufferLocation = index_buffer->GetGPUVirtualAddress();
             ibv.Format = IndexBufferFormat;
             ibv.SizeInBytes = (uint32_t)index_buffer_bytes;
-            current_cmd_list->IASetIndexBuffer(&ibv);
+             current_cmd_list->IASetIndexBuffer(&ibv);
 
             // Set PSO
             current_cmd_list->SetPipelineState(graphics_pso);
 
             // Draw Indexed
-            current_cmd_list->DrawIndexedInstanced((uint32_t)mesh.indices.size(), 1, 0, 0, 0);
-            
+            // current_cmd_list->DrawIndexedInstanced((uint32_t)mesh.indices.size(), 1, 0, 0, 0);
+            current_cmd_list->DrawInstanced((uint32_t)mesh.vertices.size(), 1, 0, 0);
+
             // Transition RTV from D3D12_RESOURCE_STATE_RENDER_TARGET to D3D12_RESOURCE_STATE_PRESENT
             D3D12_RESOURCE_BARRIER barrier_before_present = {};
             barrier_before_present.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
@@ -605,22 +628,20 @@ int main ()
         // Present the frame.
         swap_chain->Present(1, 0);
 
-        UINT64 wait_for_fence_val = frame_sync.fence_values[frame_index];
-        direct_queue->Signal(frame_sync.fences[frame_index], wait_for_fence_val);
+        UINT64 wait_for_fence_val = sync.fence_values[frame_index];
+        direct_queue->Signal(sync.fences[frame_index], wait_for_fence_val);
 
-        if(frame_sync.fences[frame_index]->GetCompletedValue() < frame_sync.fence_values[frame_index]) {
-            frame_sync.fences[frame_index]->SetEventOnCompletion(wait_for_fence_val, frame_sync.events[frame_index]);
-            WaitForSingleObject(frame_sync.events[frame_index], INFINITE);
+        if(sync.fences[frame_index]->GetCompletedValue() < sync.fence_values[frame_index]) {
+            sync.fences[frame_index]->SetEventOnCompletion(wait_for_fence_val, sync.events[frame_index]);
+            WaitForSingleObject(sync.events[frame_index], INFINITE);
         }
 
-        frame_sync.fence_values[frame_index]++;
+        sync.fence_values[frame_index]++;
 
         if(frame_index >= frame_queue_length) {
             frame_index = 0;
         }
     }
-
-    frame_sync.Release();
 
     // Abstract and Make Code Nicer and More Flexible (DemoFramework?)
     // Try WARP
@@ -638,6 +659,8 @@ int main ()
     }
 
     rtv_heap->Release();
+    
+    sync.Release();
 
     copy_cmd_list->Release();
     for(uint32_t i = 0; i < frame_queue_length; ++i) {

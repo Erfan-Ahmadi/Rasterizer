@@ -105,9 +105,9 @@ runtimeobject.lib
 
 // Vertex/Index Buffer:
 struct Vertex {
-    float   pos[4];
-    uint8_t col[4];
-    float   uv[2];
+    float   pos[3];
+    float   col[4];
+    // float   uv[2];
 };
 
 
