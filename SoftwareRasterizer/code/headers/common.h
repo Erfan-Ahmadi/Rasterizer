@@ -111,8 +111,8 @@ struct Vertex {
 };
 
 
-using IndexType = uint16_t;
-static DXGI_FORMAT IndexBufferFormat = DXGI_FORMAT_R16_UINT;
+using IndexType = uint32_t;
+static DXGI_FORMAT IndexBufferFormat = DXGI_FORMAT_R32_UINT;
 
 struct Mesh {
     std::vector<Vertex> vertices;

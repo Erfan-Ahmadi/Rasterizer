@@ -78,7 +78,7 @@ void GetQuadMesh(Mesh * out) {
             {{ 1.0f, -1.0f, 0.0f}, {255, 255, 255, 255}, {1.0f, 0.0f}}, // RT?
         });
         
-        out->indices = std::vector<uint16_t>({
+        out->indices = std::vector<IndexType>({
             0, 1, 2, 0, 3, 1
         });
 
@@ -96,7 +96,7 @@ void GetTriangleMesh(Mesh * out) {
             {{ 1.0f, -1.0f, 0.0f}, {255, 255, 255, 255}, {1.0f, 0.0f}}, // RT?
         });
         
-        out->indices = std::vector<uint16_t>({
+        out->indices = std::vector<IndexType>({
             0, 1, 2, 0, 3, 1
         });
 
@@ -323,7 +323,7 @@ int main ()
         vertex_layout[1].SemanticName = "COLOR";
         vertex_layout[1].SemanticIndex = 0;
         vertex_layout[1].Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-        vertex_layout[1].InputSlot = 1;
+        vertex_layout[1].InputSlot = 0;
         vertex_layout[1].AlignedByteOffset = offsetof(Vertex, col);
         vertex_layout[1].InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
         vertex_layout[1].InstanceDataStepRate = 0;
@@ -331,7 +331,7 @@ int main ()
         vertex_layout[2].SemanticName = "TEXCOORD";
         vertex_layout[2].SemanticIndex = 0;
         vertex_layout[2].Format = DXGI_FORMAT_R32G32_FLOAT;
-        vertex_layout[2].InputSlot = 2;
+        vertex_layout[2].InputSlot = 0;
         vertex_layout[2].AlignedByteOffset = offsetof(Vertex, uv);
         vertex_layout[2].InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
         vertex_layout[2].InstanceDataStepRate = 0;
@@ -384,14 +384,14 @@ int main ()
     
     ID3D12Resource * vertex_buffer = nullptr;
     ID3D12Resource * index_buffer = nullptr;
-    size_t vertex_buffer_size = sizeof(Vertex) * mesh.vertices.size();
-    size_t index_buffer_size = sizeof(IndexType) * mesh.indices.size();
+    size_t vertex_buffer_bytes = sizeof(Vertex) * mesh.vertices.size();
+    size_t index_buffer_bytes = sizeof(IndexType) * mesh.indices.size();
 
     // Vertex Buffer
     {
         // Buffer Allocation
         D3D12_HEAP_PROPERTIES   heap_props      = GetDefaultHeapProps(D3D12_HEAP_TYPE_DEFAULT);
-        D3D12_RESOURCE_DESC     resource_desc   = GetBufferResourceDesc(vertex_buffer_size);
+        D3D12_RESOURCE_DESC     resource_desc   = GetBufferResourceDesc(vertex_buffer_bytes);
         res = d3d_device->CreateCommittedResource(&heap_props,
             D3D12_HEAP_FLAG_NONE,
             &resource_desc,
@@ -404,7 +404,7 @@ int main ()
 
         // Staging
         D3D12_HEAP_PROPERTIES   staging_heap_props      = GetDefaultHeapProps(D3D12_HEAP_TYPE_UPLOAD);
-        D3D12_RESOURCE_DESC     staging_resource_desc   = GetBufferResourceDesc(vertex_buffer_size);
+        D3D12_RESOURCE_DESC     staging_resource_desc   = GetBufferResourceDesc(vertex_buffer_bytes);
         res = d3d_device->CreateCommittedResource(&staging_heap_props,
             D3D12_HEAP_FLAG_NONE,
             &staging_resource_desc,
@@ -417,7 +417,7 @@ int main ()
         using Byte = uint8_t;
         Byte * vertex_data_begin = nullptr;
         staging_vertex_buffer->Map(0, &read_range, reinterpret_cast<void**>(&vertex_data_begin));
-        memcpy(vertex_data_begin, mesh.vertices.data(), sizeof(Vertex) * mesh.vertices.size());
+        memcpy(vertex_data_begin, mesh.vertices.data(), vertex_buffer_bytes);
         staging_vertex_buffer->Unmap(0, nullptr);
 
         // Copy to Buffer
@@ -431,7 +431,7 @@ int main ()
             direct_cmd_list[0]->Reset(direct_cmd_allocator, nullptr);
             direct_cmd_list[0]->ResourceBarrier(1, &barrier_before);
 
-            direct_cmd_list[0]->CopyBufferRegion(vertex_buffer, 0, staging_vertex_buffer, 0, vertex_buffer_size);
+            direct_cmd_list[0]->CopyBufferRegion(vertex_buffer, 0, staging_vertex_buffer, 0, vertex_buffer_bytes);
 
             D3D12_RESOURCE_BARRIER barrier_after = {};
             barrier_after.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
@@ -450,7 +450,7 @@ int main ()
     {
         // Buffer Allocation
         D3D12_HEAP_PROPERTIES   heap_props      = GetDefaultHeapProps(D3D12_HEAP_TYPE_DEFAULT);
-        D3D12_RESOURCE_DESC     resource_desc   = GetBufferResourceDesc(index_buffer_size);
+        D3D12_RESOURCE_DESC     resource_desc   = GetBufferResourceDesc(index_buffer_bytes);
         res = d3d_device->CreateCommittedResource(&heap_props,
             D3D12_HEAP_FLAG_NONE,
             &resource_desc,
@@ -463,7 +463,7 @@ int main ()
 
         // Staging
         D3D12_HEAP_PROPERTIES   staging_heap_props      = GetDefaultHeapProps(D3D12_HEAP_TYPE_UPLOAD);
-        D3D12_RESOURCE_DESC     staging_resource_desc   = GetBufferResourceDesc(index_buffer_size);
+        D3D12_RESOURCE_DESC     staging_resource_desc   = GetBufferResourceDesc(index_buffer_bytes);
         res = d3d_device->CreateCommittedResource(&staging_heap_props,
             D3D12_HEAP_FLAG_NONE,
             &staging_resource_desc,
@@ -476,7 +476,7 @@ int main ()
         using Byte = uint8_t;
         Byte * index_data_begin = nullptr;
         staging_index_buffer->Map(0, &read_range, reinterpret_cast<void**>(&index_data_begin));
-        memcpy(index_data_begin, mesh.indices.data(), sizeof(IndexType) * mesh.indices.size());
+        memcpy(index_data_begin, mesh.indices.data(), index_buffer_bytes);
         staging_index_buffer->Unmap(0, nullptr);
 
         // Copy to Buffer
@@ -491,7 +491,7 @@ int main ()
             direct_cmd_list[0]->Reset(direct_cmd_allocator, nullptr);
             direct_cmd_list[0]->ResourceBarrier(1, &barrier_before);
 
-            direct_cmd_list[0]->CopyBufferRegion(index_buffer, 0, staging_index_buffer, 0, index_buffer_size);
+            direct_cmd_list[0]->CopyBufferRegion(index_buffer, 0, staging_index_buffer, 0, index_buffer_bytes);
 
             D3D12_RESOURCE_BARRIER barrier_after = {};
             barrier_after.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
@@ -569,16 +569,17 @@ int main ()
             current_cmd_list->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
             // Set Vertex and Index Buffer
+
             D3D12_VERTEX_BUFFER_VIEW vbv = {};
             vbv.BufferLocation = vertex_buffer->GetGPUVirtualAddress();
-            vbv.SizeInBytes = (uint32_t)vertex_buffer_size;
+            vbv.SizeInBytes = (uint32_t)vertex_buffer_bytes;
             vbv.StrideInBytes = sizeof(Vertex);
             current_cmd_list->IASetVertexBuffers(0, 1, &vbv);
 
             D3D12_INDEX_BUFFER_VIEW ibv = {};
             ibv.BufferLocation = index_buffer->GetGPUVirtualAddress();
             ibv.Format = IndexBufferFormat;
-            ibv.SizeInBytes = (uint32_t)index_buffer_size;
+            ibv.SizeInBytes = (uint32_t)index_buffer_bytes;
             current_cmd_list->IASetIndexBuffer(&ibv);
 
             // Set PSO
