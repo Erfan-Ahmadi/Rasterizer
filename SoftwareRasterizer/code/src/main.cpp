@@ -126,7 +126,7 @@ int main ()
 #endif
 
     // Create a Window
-    SDL_Window * wnd = SDL_CreateWindow("LearningD3D12", 0, 0, window_width, window_height, 0);
+    SDL_Window * wnd = SDL_CreateWindow("LearningD3D12", 100, 100, window_width, window_height, 0);
     SDL_SysWMinfo wmInfo;
     SDL_VERSION(&wmInfo.version);
     SDL_bool sdl_res = SDL_GetWindowWMInfo(wnd, &wmInfo);
@@ -444,6 +444,21 @@ int main ()
     }
 
     shader_compiler.exit();
+
+    bool should_quit = false;
+    uint32_t frame_index = 0;
+    SDL_Event e;
+    while(false == should_quit) {
+        while(SDL_PollEvent(&e)) {
+            if(SDL_QUIT == e.type) {
+                should_quit = true;
+            }
+        }
+
+        if(frame_index >= frame_queue_length) {
+            frame_index = 0;
+        }
+    }
 
     // Fence and Sync objects
     // Main Loop and SDL Event Handling
