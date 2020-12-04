@@ -211,16 +211,24 @@ int main ()
     ID3D12CommandAllocator * direct_cmd_allocator = nullptr;
     ID3D12CommandAllocator * compute_cmd_allocator = nullptr;
     ID3D12CommandAllocator * copy_cmd_allocator = nullptr;
-    res = d3d_device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&direct_cmd_allocator));
-    CHECK_AND_FAIL(res);
-    res = d3d_device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_COMPUTE, IID_PPV_ARGS(&compute_cmd_allocator));
-    CHECK_AND_FAIL(res);
-    res = d3d_device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_COPY, IID_PPV_ARGS(&copy_cmd_allocator));
-    CHECK_AND_FAIL(res);
+    res = d3d_device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&direct_cmd_allocator)); CHECK_AND_FAIL(res);
+    res = direct_cmd_allocator->Reset(); CHECK_AND_FAIL(res);
+    res = d3d_device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_COMPUTE, IID_PPV_ARGS(&compute_cmd_allocator)); CHECK_AND_FAIL(res);
+    res = compute_cmd_allocator->Reset(); CHECK_AND_FAIL(res);
+    res = d3d_device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_COPY, IID_PPV_ARGS(&copy_cmd_allocator)); CHECK_AND_FAIL(res);
+    res = copy_cmd_allocator->Reset(); CHECK_AND_FAIL(res);
 
     ID3D12GraphicsCommandList * copy_cmd_list = nullptr;
     res = d3d_device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_COPY, copy_cmd_allocator, nullptr, IID_PPV_ARGS(&copy_cmd_list));
+    copy_cmd_list->Close();
     CHECK_AND_FAIL(res);
+    
+    ID3D12GraphicsCommandList * direct_cmd_list [frame_queue_length] = {};
+    for(uint32_t i = 0; i < frame_queue_length; ++i) {
+        res = d3d_device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, direct_cmd_allocator, nullptr, IID_PPV_ARGS(&direct_cmd_list[i]));
+        direct_cmd_list[i]->Close();
+        CHECK_AND_FAIL(res);
+    }
 
     IDxcBlob * vertex_shader = shader_compiler.compile_from_file(L"../code/src/shaders/simple_mesh.vert.hlsl", L"VSMain", L"vs_6_5");
     IDxcBlob * pixel_shader = shader_compiler.compile_from_file(L"../code/src/shaders/simple_mesh.frag.hlsl", L"PSMain", L"ps_6_5");
@@ -243,6 +251,13 @@ int main ()
     res = d3d_device->CreateRootSignature(0, rs_blob->GetBufferPointer(), rs_blob->GetBufferSize(), IID_PPV_ARGS(&root_signature));
     CHECK_AND_FAIL(res);
 
+    D3D12_GRAPHICS_PIPELINE_STATE_DESC pso_desc = {};
+    pso_desc.pRootSignature = root_signature;
+    pso_desc.VS.pShaderBytecode = vertex_shader->GetBufferPointer();
+    pso_desc.VS.BytecodeLength = vertex_shader->GetBufferSize();
+    pso_desc.PS.pShaderBytecode = pixel_shader->GetBufferPointer();
+    pso_desc.PS.BytecodeLength = pixel_shader->GetBufferSize();
+    pso_desc.CachedPSO = {};
     root_signature->Release();
     rs_blob->Release();
 
@@ -262,7 +277,10 @@ int main ()
 
     CONSUME_VAR(index_buffer);
     CONSUME_VAR(index_buffer_size);
+    CONSUME_VAR(vertex_buffer);
+    CONSUME_VAR(vertex_buffer_size);
 
+    
     // Vertex Buffer
     {
         // Buffer Allocation
@@ -297,9 +315,10 @@ int main ()
             barrier_before.Transition.pResource = vertex_buffer;
             barrier_before.Transition.StateBefore = D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER;
             barrier_before.Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_DEST;
-            copy_cmd_list->ResourceBarrier(1, &barrier_before);
+            direct_cmd_list[0]->Reset(direct_cmd_allocator, nullptr);
+            direct_cmd_list[0]->ResourceBarrier(1, &barrier_before);
 
-            copy_cmd_list->CopyBufferRegion(vertex_buffer, 0, staging_vertex_buffer, 0, vertex_buffer_size);
+            direct_cmd_list[0]->CopyBufferRegion(vertex_buffer, 0, staging_vertex_buffer, 0, vertex_buffer_size);
 
             D3D12_RESOURCE_BARRIER barrier_after = {};
             barrier_after.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
@@ -307,7 +326,8 @@ int main ()
             barrier_after.Transition.pResource = vertex_buffer;
             barrier_after.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
             barrier_after.Transition.StateAfter = D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER;
-            copy_cmd_list->ResourceBarrier(1, &barrier_after);
+            direct_cmd_list[0]->ResourceBarrier(1, &barrier_after);
+            direct_cmd_list[0]->Close();
         }
 
         // Delete Staging Buffer
@@ -347,9 +367,11 @@ int main ()
             barrier_before.Transition.pResource = index_buffer;
             barrier_before.Transition.StateBefore = D3D12_RESOURCE_STATE_INDEX_BUFFER;
             barrier_before.Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_DEST;
-            copy_cmd_list->ResourceBarrier(1, &barrier_before);
+            
+            direct_cmd_list[0]->Reset(direct_cmd_allocator, nullptr);
+            direct_cmd_list[0]->ResourceBarrier(1, &barrier_before);
 
-            copy_cmd_list->CopyBufferRegion(index_buffer, 0, staging_index_buffer, 0, index_buffer_size);
+            direct_cmd_list[0]->CopyBufferRegion(index_buffer, 0, staging_index_buffer, 0, index_buffer_size);
 
             D3D12_RESOURCE_BARRIER barrier_after = {};
             barrier_after.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
@@ -357,7 +379,8 @@ int main ()
             barrier_after.Transition.pResource = index_buffer;
             barrier_after.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
             barrier_after.Transition.StateAfter = D3D12_RESOURCE_STATE_INDEX_BUFFER;
-            copy_cmd_list->ResourceBarrier(1, &barrier_after);
+            direct_cmd_list[0]->ResourceBarrier(1, &barrier_after);
+            direct_cmd_list[0]->Close();
         }
 
         // Delete Staging Buffer
@@ -375,7 +398,14 @@ int main ()
     // Abstract and Make Code Nicer and More Flexible (DemoFramework?)
     // Compute Shader and SoftwareRasterizer Begin Design and Implementation
     
+    vertex_buffer->Release();
+    index_buffer->Release();
+
     copy_cmd_list->Release();
+    for(uint32_t i = 0; i < frame_queue_length; ++i) {
+        direct_cmd_list[i]->Release();
+    }
+
     direct_cmd_allocator->Release();
     compute_cmd_allocator->Release();
     copy_cmd_allocator->Release();
