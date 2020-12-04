@@ -230,8 +230,8 @@ int main ()
         CHECK_AND_FAIL(res);
     }
 
-    IDxcBlob * vertex_shader = shader_compiler.compile_from_file(L"../code/src/shaders/simple_mesh.vert.hlsl", L"VSMain", L"vs_6_5");
-    IDxcBlob * pixel_shader = shader_compiler.compile_from_file(L"../code/src/shaders/simple_mesh.frag.hlsl", L"PSMain", L"ps_6_5");
+    IDxcBlob * vertex_shader = shader_compiler.compile_from_file(L"../code/src/shaders/simple_mesh.vert.hlsl", L"VSMain", L"vs_6_0");
+    IDxcBlob * pixel_shader = shader_compiler.compile_from_file(L"../code/src/shaders/simple_mesh.frag.hlsl", L"PSMain", L"ps_6_0");
     ASSERT(nullptr != vertex_shader);
     ASSERT(nullptr != pixel_shader);
 
@@ -240,6 +240,7 @@ int main ()
     D3D12_VERSIONED_ROOT_SIGNATURE_DESC root_signature_desc = {};
     root_signature_desc.Version = D3D_ROOT_SIGNATURE_VERSION_1_1;
     root_signature_desc.Desc_1_1 = {};
+    root_signature_desc.Desc_1_1.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
     res = D3D12SerializeVersionedRootSignature(&root_signature_desc, &rs_blob, &rs_error_blob);
     CHECK_AND_FAIL(res);
     if(nullptr != rs_error_blob) {
@@ -251,14 +252,70 @@ int main ()
     res = d3d_device->CreateRootSignature(0, rs_blob->GetBufferPointer(), rs_blob->GetBufferSize(), IID_PPV_ARGS(&root_signature));
     CHECK_AND_FAIL(res);
 
+    ID3D12PipelineState * graphics_pso = nullptr;
+
+    constexpr uint32_t VertexInputElemCount = 3;
+    D3D12_INPUT_ELEMENT_DESC vertex_layout[VertexInputElemCount] = {};
+    vertex_layout[0].SemanticName = "POSITION";
+    vertex_layout[0].SemanticIndex = 0;
+    vertex_layout[0].Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
+    vertex_layout[0].InputSlot = 0;
+    vertex_layout[0].AlignedByteOffset = 0;
+    vertex_layout[0].InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
+    vertex_layout[0].InstanceDataStepRate = 0;
+    //
+    vertex_layout[1].SemanticName = "COLOR";
+    vertex_layout[1].SemanticIndex = 0;
+    vertex_layout[1].Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    vertex_layout[1].InputSlot = 1;
+    vertex_layout[1].AlignedByteOffset = offsetof(Vertex, col);
+    vertex_layout[1].InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
+    vertex_layout[1].InstanceDataStepRate = 0;
+    //
+    vertex_layout[2].SemanticName = "TEXCOORD";
+    vertex_layout[2].SemanticIndex = 0;
+    vertex_layout[2].Format = DXGI_FORMAT_R32G32_FLOAT;
+    vertex_layout[2].InputSlot = 2;
+    vertex_layout[2].AlignedByteOffset = offsetof(Vertex, uv);
+    vertex_layout[2].InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
+    vertex_layout[2].InstanceDataStepRate = 0;
+
     D3D12_GRAPHICS_PIPELINE_STATE_DESC pso_desc = {};
     pso_desc.pRootSignature = root_signature;
     pso_desc.VS.pShaderBytecode = vertex_shader->GetBufferPointer();
     pso_desc.VS.BytecodeLength = vertex_shader->GetBufferSize();
     pso_desc.PS.pShaderBytecode = pixel_shader->GetBufferPointer();
     pso_desc.PS.BytecodeLength = pixel_shader->GetBufferSize();
+    pso_desc.BlendState = {};
+    pso_desc.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
+    pso_desc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
+    pso_desc.RasterizerState.FrontCounterClockwise = FALSE;
+    pso_desc.RasterizerState.DepthBias = 0;
+    pso_desc.RasterizerState.DepthBiasClamp = 0;
+    pso_desc.RasterizerState.SlopeScaledDepthBias = 0;
+    pso_desc.RasterizerState.DepthClipEnable = FALSE;
+    pso_desc.RasterizerState.MultisampleEnable = FALSE;
+    pso_desc.RasterizerState.AntialiasedLineEnable = FALSE;
+    pso_desc.RasterizerState.ForcedSampleCount = FALSE;
+    pso_desc.RasterizerState.ConservativeRaster = D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF;
+    pso_desc.SampleMask = 0;
+    pso_desc.DepthStencilState.DepthEnable = FALSE;
+    pso_desc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
+    pso_desc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_LESS;
+    pso_desc.DepthStencilState.StencilEnable = FALSE;
+    pso_desc.InputLayout.pInputElementDescs = vertex_layout;
+    pso_desc.InputLayout.NumElements = VertexInputElemCount;
+    pso_desc.IBStripCutValue = D3D12_INDEX_BUFFER_STRIP_CUT_VALUE_DISABLED;
+    pso_desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+    pso_desc.NumRenderTargets = 1;
+    pso_desc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
+    pso_desc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
+    pso_desc.SampleDesc.Count = 1;
+    pso_desc.SampleDesc.Quality = 0;
+    pso_desc.NodeMask = 0;
     pso_desc.CachedPSO = {};
-    root_signature->Release();
+    pso_desc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
+    res = d3d_device->CreateGraphicsPipelineState(&pso_desc, IID_PPV_ARGS(&graphics_pso)); CHECK_AND_FAIL(res);
     rs_blob->Release();
 
     // RootSignatures, DescriptorHeaps etc...
@@ -275,12 +332,11 @@ int main ()
     size_t vertex_buffer_size = sizeof(Vertex) * mesh.vertices.size();
     size_t index_buffer_size = sizeof(IndexType) * mesh.indices.size();
 
-    CONSUME_VAR(index_buffer);
-    CONSUME_VAR(index_buffer_size);
-    CONSUME_VAR(vertex_buffer);
-    CONSUME_VAR(vertex_buffer_size);
+    //CONSUME_VAR(index_buffer);
+    //CONSUME_VAR(index_buffer_size);
+    //CONSUME_VAR(vertex_buffer);
+    //CONSUME_VAR(vertex_buffer_size);
 
-    
     // Vertex Buffer
     {
         // Buffer Allocation
@@ -398,6 +454,9 @@ int main ()
     // Abstract and Make Code Nicer and More Flexible (DemoFramework?)
     // Compute Shader and SoftwareRasterizer Begin Design and Implementation
     
+    root_signature->Release();
+    graphics_pso->Release();
+
     vertex_buffer->Release();
     index_buffer->Release();
 

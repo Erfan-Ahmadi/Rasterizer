@@ -1,6 +1,6 @@
 struct VSInput
 {
-	float4 Position	    	: SV_POSITION;
+	float4 Position	    	: POSITION0;
     float4 Col	        	: COLOR0;
 	float2 UV				: TEXCOORD0;
 };
