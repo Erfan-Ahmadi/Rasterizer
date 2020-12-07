@@ -9,29 +9,41 @@
       <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
       <Extensions>h;hh;hpp;hxx;h++;hm;inl;inc;ipp;xsd</Extensions>
     </Filter>
+    <Filter Include="Source Files\demos">
+      <UniqueIdentifier>{ec68d84a-7d77-4864-a173-a97421de4269}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Source Files\shaders">
       <UniqueIdentifier>{c3bb385f-18b8-4d48-9c8c-01c9c71bc8cf}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Source Files\src">
-      <UniqueIdentifier>{8931395b-5a63-4db8-ae5d-7014b6d6d4df}</UniqueIdentifier>
+    <Filter Include="Source Files\shaders\demo_001">
+      <UniqueIdentifier>{e75a7d06-180f-4cfa-9a10-bc1d320bfa01}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\code\src\main.cpp">
-      <Filter>Source Files\src</Filter>
+    <ClCompile Include="..\code\src\demo_framework.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\code\src\demos\demo_000_nothing.cpp">
+      <Filter>Source Files\demos</Filter>
+    </ClCompile>
+    <ClCompile Include="..\code\src\demos\demo_001_triangle.cpp">
+      <Filter>Source Files\demos</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\code\headers\common.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="..\code\src\common.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\code\src\demo_framework.hpp">
+      <Filter>Source Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <FxCompile Include="..\code\src\shaders\simple_mesh.frag.hlsl">
-      <Filter>Source Files\shaders</Filter>
+    <FxCompile Include="..\code\src\shaders\demo001\simple_mesh.vert.hlsl">
+      <Filter>Source Files\shaders\demo_001</Filter>
     </FxCompile>
-    <FxCompile Include="..\code\src\shaders\simple_mesh.vert.hlsl">
-      <Filter>Source Files\shaders</Filter>
+    <FxCompile Include="..\code\src\shaders\demo001\simple_mesh.frag.hlsl">
+      <Filter>Source Files\shaders\demo_001</Filter>
     </FxCompile>
   </ItemGroup>
 </Project>

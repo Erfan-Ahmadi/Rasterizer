@@ -1,5 +1,9 @@
 #pragma once
 #include <stdio.h>
+#include <cstdint>
+#include <functional>
+#include <filesystem>
+#include <chrono>
 
 // DirectX 12 specific headers.
 #include <d3d12.h>
@@ -58,6 +62,10 @@
 #include <cstdio>
 #include <algorithm>
 
+#if defined(_MSC_VER)
+#define COMPILER_IS_MSVC 1
+#endif
+
 // windows runtime library. needed for microsoft::wrl::comptr<> template class.
 //#include <wrl.h>
 //using namespace microsoft::wrl;
@@ -105,9 +113,9 @@ runtimeobject.lib
 
 // Vertex/Index Buffer:
 struct Vertex {
-    float   pos[3];
-    float   col[4];
-    float   uv[2];
+    float       pos[3];
+    uint8_t     col[4];
+    float       uv[2];
 };
 
 
