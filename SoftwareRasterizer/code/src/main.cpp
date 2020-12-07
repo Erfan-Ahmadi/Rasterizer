@@ -87,30 +87,74 @@ void GetTriangleMesh(Mesh * out) {
 }
 
 struct {
-    ID3D12Fence * fences[frame_queue_length] = {};
-    HANDLE events[frame_queue_length] = {};
+    ID3D12Fence * fence = {};
+    HANDLE event = {};
     UINT64 fence_values[frame_queue_length] = {};
+    uint32_t frame_index = 0;
+
+    void WaitForQueue(ID3D12CommandQueue * queue) {
+        if(nullptr != queue) {
+            queue->Signal(fence, fence_values[frame_index]);
+            
+            // Wait until the fence has been processed.
+            HRESULT res = fence->SetEventOnCompletion(fence_values[frame_index], event);
+            CHECK_AND_FAIL(res);
+
+            WaitForSingleObjectEx(event, INFINITE, FALSE);
+
+            // Increment the fence value for the current frame.
+            fence_values[frame_index]++;
+        } else {
+            ::printf("WaitForQueue(queue): queue is nullptr");
+        }
+    }
+
+    void MoveToNextFrame(ID3D12CommandQueue * queue, IDXGISwapChain4 * swap_chain) {
+        if(nullptr != queue) {
+            if(nullptr != swap_chain) {
+                // Schedule a Signal command in the queue.
+                const UINT64 current_fence_value = fence_values[frame_index];
+                HRESULT res = queue->Signal(fence, current_fence_value);
+                CHECK_AND_FAIL(res);
+
+                // Update the frame index.
+                frame_index = swap_chain->GetCurrentBackBufferIndex();
+
+                // If the next frame is not ready to be rendered yet, wait until it is ready.
+                if (fence->GetCompletedValue() < fence_values[frame_index])
+                {
+                    res = fence->SetEventOnCompletion(fence_values[frame_index], event);
+                    CHECK_AND_FAIL(res);
+                    WaitForSingleObjectEx(event, INFINITE, FALSE);
+                }
+
+                // Set the fence value for the next frame.
+                fence_values[frame_index] = current_fence_value + 1;
+            } else {
+                ::printf("MoveToNextFrame(queue, swap_chain): swap_chain is nullptr");
+            }
+        } else {
+            ::printf("MoveToNextFrame(queue, swap_chain): queue is nullptr");
+        }
+
+    }
 
     void Init(ID3D12Device * d3d_device) {
-        for(uint32_t f = 0; f < frame_queue_length; ++f) {
-            HRESULT res = d3d_device->CreateFence(fence_values[f], D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fences[f]));
+        HRESULT res = d3d_device->CreateFence(fence_values[frame_index], D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence));
+        CHECK_AND_FAIL(res);
+        fence_values[frame_index]++;
+        event = CreateEvent(nullptr, FALSE, FALSE, nullptr);
+        if(nullptr == event) {
+            res = HRESULT_FROM_WIN32(GetLastError());
             CHECK_AND_FAIL(res);
-            fence_values[f]++;
-            events[f] = CreateEvent(nullptr, FALSE, FALSE, nullptr);
-            if(nullptr == events[f]) {
-                res = HRESULT_FROM_WIN32(GetLastError());
-                CHECK_AND_FAIL(res);
-            }
         }
     }
 
     void Release() {
-        for(uint32_t f = 0; f < frame_queue_length; ++f) {
-            fences[f]->Release();
-            CloseHandle(events[f]);
-        }
+        fence->Release();
+        CloseHandle(event);
     }
-} sync;
+} frame_sync;
 
 int main () 
 {
@@ -243,7 +287,7 @@ int main ()
         CHECK_AND_FAIL(res);
     }
     
-    sync.Init(d3d_device);
+    frame_sync.Init(d3d_device);
 
     // Create RTV DesriptorHeap for SwapChain RenderTargets
     ID3D12DescriptorHeap * rtv_heap = nullptr;
@@ -441,15 +485,7 @@ int main ()
             ID3D12CommandList * execute_cmds[1] = { direct_cmd_list[0] };
             direct_queue->ExecuteCommandLists(1, execute_cmds);
 
-            UINT64 wait_for_fence_val = sync.fence_values[0];
-            direct_queue->Signal(sync.fences[0], wait_for_fence_val);
-
-            if(sync.fences[0]->GetCompletedValue() < sync.fence_values[0]) {
-                sync.fences[0]->SetEventOnCompletion(wait_for_fence_val, sync.events[0]);
-                WaitForSingleObject(sync.events[0], INFINITE);
-            }
-
-            sync.fence_values[0]++;
+            frame_sync.WaitForQueue(direct_queue);
         }
 
         // Delete Staging Buffer
@@ -513,16 +549,8 @@ int main ()
             
             ID3D12CommandList * execute_cmds[1] = { direct_cmd_list[0] };
             direct_queue->ExecuteCommandLists(1, execute_cmds);
-
-            UINT64 wait_for_fence_val = sync.fence_values[0];
-            direct_queue->Signal(sync.fences[0], wait_for_fence_val);
-
-            if(sync.fences[0]->GetCompletedValue() < sync.fence_values[0]) {
-                sync.fences[0]->SetEventOnCompletion(wait_for_fence_val, sync.events[0]);
-                WaitForSingleObject(sync.events[0], INFINITE);
-            }
-
-            sync.fence_values[0]++;
+            
+            frame_sync.WaitForQueue(direct_queue);
         }
 
         // Delete Staging Buffer
@@ -627,15 +655,7 @@ int main ()
         // Present the frame.
         swap_chain->Present(1, 0);
 
-        UINT64 wait_for_fence_val = sync.fence_values[frame_index];
-        direct_queue->Signal(sync.fences[frame_index], wait_for_fence_val);
-
-        if(sync.fences[frame_index]->GetCompletedValue() < sync.fence_values[frame_index]) {
-            sync.fences[frame_index]->SetEventOnCompletion(wait_for_fence_val, sync.events[frame_index]);
-            WaitForSingleObject(sync.events[frame_index], INFINITE);
-        }
-
-        sync.fence_values[frame_index]++;
+        frame_sync.MoveToNextFrame(direct_queue, swap_chain);
 
         if(frame_index >= frame_queue_length) {
             frame_index = 0;
@@ -647,6 +667,9 @@ int main ()
     // Integrate STB to Load Images
     // Texture Sampling Demo
     // Compute Shader and SoftwareRasterizer Begin Design and Implementation
+
+    frame_sync.WaitForQueue(direct_queue);
+
     root_signature->Release();
     graphics_pso->Release();
 
@@ -659,7 +682,7 @@ int main ()
 
     rtv_heap->Release();
     
-    sync.Release();
+    frame_sync.Release();
 
     copy_cmd_list->Release();
     for(uint32_t i = 0; i < frame_queue_length; ++i) {
