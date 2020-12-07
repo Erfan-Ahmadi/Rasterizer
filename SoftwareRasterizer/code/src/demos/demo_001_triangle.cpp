@@ -76,74 +76,71 @@ private:
     size_t vertex_buffer_bytes  = 0;
     size_t index_buffer_bytes   = 0;
 
-    struct FrameSync {
-    public:
-        ID3D12Fence * fence = {};
-        HANDLE event = {};
-        UINT64 fence_values[FrameQueueLength] = {};
-        uint32_t frame_index = 0;
-    public:
-        void WaitForQueue(ID3D12CommandQueue * queue) {
-            if(nullptr != queue) {
-                queue->Signal(fence, fence_values[frame_index]);
+    // FrameSync
+    ID3D12Fence * fence = {};
+    HANDLE event = {};
+    UINT64 fence_values[FrameQueueLength] = {};
+    uint32_t frame_index = 0;
+
+    void WaitForQueue(ID3D12CommandQueue * queue) {
+        if(nullptr != queue) {
+            queue->Signal(fence, fence_values[frame_index]);
             
-                // Wait until the fence has been processed.
-                HRESULT res = fence->SetEventOnCompletion(fence_values[frame_index], event);
-                CHECK_AND_FAIL(res);
-
-                WaitForSingleObjectEx(event, INFINITE, FALSE);
-
-                // Increment the fence value for the current frame.
-                fence_values[frame_index]++;
-            } else {
-                ::printf("WaitForQueue(queue): queue is nullptr");
-            }
-        }
-        void MoveToNextFrame(ID3D12CommandQueue * queue, IDXGISwapChain4 * swap_chain) {
-            if(nullptr != queue) {
-                if(nullptr != swap_chain) {
-                    // Schedule a Signal command in the queue.
-                    const UINT64 current_fence_value = fence_values[frame_index];
-                    HRESULT res = queue->Signal(fence, current_fence_value);
-                    CHECK_AND_FAIL(res);
-
-                    // Update the frame index.
-                    frame_index = swap_chain->GetCurrentBackBufferIndex();
-
-                    // If the next frame is not ready to be rendered yet, wait until it is ready.
-                    if (fence->GetCompletedValue() < fence_values[frame_index])
-                    {
-                        res = fence->SetEventOnCompletion(fence_values[frame_index], event);
-                        CHECK_AND_FAIL(res);
-                        WaitForSingleObjectEx(event, INFINITE, FALSE);
-                    }
-
-                    // Set the fence value for the next frame.
-                    fence_values[frame_index] = current_fence_value + 1;
-                } else {
-                    ::printf("MoveToNextFrame(queue, swap_chain): swap_chain is nullptr");
-                }
-            } else {
-                ::printf("MoveToNextFrame(queue, swap_chain): queue is nullptr");
-            }
-
-        }
-        void Init(ID3D12Device * d3d_device) {
-            HRESULT res = d3d_device->CreateFence(fence_values[frame_index], D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence));
+            // Wait until the fence has been processed.
+            HRESULT res = fence->SetEventOnCompletion(fence_values[frame_index], event);
             CHECK_AND_FAIL(res);
-            fence_values[frame_index]++;
-            event = CreateEvent(nullptr, FALSE, FALSE, nullptr);
-            if(nullptr == event) {
-                res = HRESULT_FROM_WIN32(GetLastError());
-                CHECK_AND_FAIL(res);
-            }
-        }
-        void Release() {
-            fence->Release();
-            CloseHandle(event);
-        }
-    } frame_sync;
 
+            WaitForSingleObjectEx(event, INFINITE, FALSE);
+
+            // Increment the fence value for the current frame.
+            fence_values[frame_index]++;
+        } else {
+            ::printf("WaitForQueue(queue): queue is nullptr");
+        }
+    }
+    void MoveToNextFrame(ID3D12CommandQueue * queue) {
+        if(nullptr != queue) {
+            if(nullptr != swap_chain) {
+                // Schedule a Signal command in the queue.
+                const UINT64 current_fence_value = fence_values[frame_index];
+                HRESULT res = queue->Signal(fence, current_fence_value);
+                CHECK_AND_FAIL(res);
+
+                // Update the frame index.
+                frame_index = swap_chain->GetCurrentBackBufferIndex();
+
+                // If the next frame is not ready to be rendered yet, wait until it is ready.
+                if (fence->GetCompletedValue() < fence_values[frame_index])
+                {
+                    res = fence->SetEventOnCompletion(fence_values[frame_index], event);
+                    CHECK_AND_FAIL(res);
+                    WaitForSingleObjectEx(event, INFINITE, FALSE);
+                }
+
+                // Set the fence value for the next frame.
+                fence_values[frame_index] = current_fence_value + 1;
+            } else {
+                ::printf("MoveToNextFrame(queue, swap_chain): swap_chain is nullptr");
+            }
+        } else {
+            ::printf("MoveToNextFrame(queue, swap_chain): queue is nullptr");
+        }
+
+    }
+    void InitSyncResources() {
+        HRESULT res = device->CreateFence(fence_values[frame_index], D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence));
+        CHECK_AND_FAIL(res);
+        fence_values[frame_index]++;
+        event = CreateEvent(nullptr, FALSE, FALSE, nullptr);
+        if(nullptr == event) {
+            res = HRESULT_FROM_WIN32(GetLastError());
+            CHECK_AND_FAIL(res);
+        }
+    }
+    void ExitSyncResources() {
+        fence->Release();
+        CloseHandle(event);
+    }
 };
 
 static auto _ = Demo_Register("Triangle", [] { return new Demo_001_Triangle(); });
@@ -188,7 +185,7 @@ bool Demo_001_Triangle::DoInitResources() {
         CHECK_AND_FAIL(res);
     }
     
-    frame_sync.Init(device);
+    InitSyncResources();
 
     // Create RTV DesriptorHeap for SwapChain RenderTargets
     {
@@ -377,7 +374,7 @@ bool Demo_001_Triangle::DoInitResources() {
             ID3D12CommandList * execute_cmds[1] = { direct_cmd_list[0] };
             direct_queue->ExecuteCommandLists(1, execute_cmds);
 
-            frame_sync.WaitForQueue(direct_queue);
+            WaitForQueue(direct_queue);
         }
 
         // Delete Staging Buffer
@@ -442,7 +439,7 @@ bool Demo_001_Triangle::DoInitResources() {
             ID3D12CommandList * execute_cmds[1] = { direct_cmd_list[0] };
             direct_queue->ExecuteCommandLists(1, execute_cmds);
             
-            frame_sync.WaitForQueue(direct_queue);
+            WaitForQueue(direct_queue);
         }
 
         // Delete Staging Buffer
@@ -453,7 +450,7 @@ bool Demo_001_Triangle::DoInitResources() {
 }
 
 bool Demo_001_Triangle::DoExitResources() { 
-    frame_sync.WaitForQueue(direct_queue);
+    WaitForQueue(direct_queue);
 
     root_signature->Release();
     graphics_pso->Release();
@@ -467,7 +464,7 @@ bool Demo_001_Triangle::DoExitResources() {
 
     rtv_heap->Release();
     
-    frame_sync.Release();
+    ExitSyncResources();
 
     copy_cmd_list->Release();
     for(uint32_t i = 0; i < FrameQueueLength; ++i) {
@@ -486,7 +483,7 @@ bool Demo_001_Triangle::DoExitResources() {
 void Demo_001_Triangle::OnRender() {
 
     // Populate Command List
-    ID3D12GraphicsCommandList * current_cmd_list = direct_cmd_list[frame_sync.frame_index];
+    ID3D12GraphicsCommandList * current_cmd_list = direct_cmd_list[frame_index];
     current_cmd_list->Reset(direct_cmd_allocator, nullptr);
     {
         current_cmd_list->SetGraphicsRootSignature(root_signature);
@@ -511,13 +508,13 @@ void Demo_001_Triangle::OnRender() {
         } 
 
         D3D12_CPU_DESCRIPTOR_HANDLE rtv_handle = rtv_heap->GetCPUDescriptorHandleForHeapStart();
-        rtv_handle.ptr = rtv_handle.ptr + SIZE_T(frame_sync.frame_index * rtv_handle_increment_size);
+        rtv_handle.ptr = rtv_handle.ptr + SIZE_T(frame_index * rtv_handle_increment_size);
 
         // Transition RTV from D3D12_RESOURCE_STATE_PRESENT to D3D12_RESOURCE_STATE_RENDER_TARGET.
         D3D12_RESOURCE_BARRIER barrier_before_render = {};
         barrier_before_render.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
         barrier_before_render.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
-        barrier_before_render.Transition.pResource = swap_chain_render_targets[frame_sync.frame_index];
+        barrier_before_render.Transition.pResource = swap_chain_render_targets[frame_index];
         barrier_before_render.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
         barrier_before_render.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
         current_cmd_list->ResourceBarrier(1, &barrier_before_render);
@@ -553,7 +550,7 @@ void Demo_001_Triangle::OnRender() {
         D3D12_RESOURCE_BARRIER barrier_before_present = {};
         barrier_before_present.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
         barrier_before_present.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
-        barrier_before_present.Transition.pResource = swap_chain_render_targets[frame_sync.frame_index];
+        barrier_before_present.Transition.pResource = swap_chain_render_targets[frame_index];
         barrier_before_present.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
         barrier_before_present.Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
         current_cmd_list->ResourceBarrier(1, &barrier_before_present);
@@ -567,7 +564,7 @@ void Demo_001_Triangle::OnRender() {
     // Present the frame.
     swap_chain->Present(1, 0);
 
-    frame_sync.MoveToNextFrame(direct_queue, swap_chain);
+    MoveToNextFrame(direct_queue);
 }
 
 void Demo_001_Triangle::OnUpdate() {}
