@@ -72,9 +72,9 @@ public:
 void GetTriangleMesh(Mesh * out) {
     if(nullptr != out) {
         out->vertices = std::vector<Vertex>({
-            { { 0.0f,    0.4f,   0.0f }, {0.8f,   0.0f,   0.6f,   1.0f}, {0.0f, 0.0f} }, // TOP
-            { { 0.25f,   -0.4f,  0.0f }, {0.1f,   0.6f,   0.4f,   1.0f}, {0.0f, 0.0f} }, // LEFT
-            { { -0.25f,  -0.4f,  0.0f }, {0,      0.5f,   1.0f,   1.0f}, {0.0f, 0.0f} }, // RIGHT
+            { { 0.0f,    0.4f,   0.0f }, {0.8f,   0.0f,   0.6f,   1.0f}, {0.0f, 0.0f} }, // MIDDLE_TOP
+            { { 0.25f,   -0.4f,  0.0f }, {0.1f,   0.6f,   0.4f,   1.0f}, {0.0f, 0.0f} }, // BOTTOM_RIGHT
+            { { -0.25f,  -0.4f,  0.0f }, {0,      0.5f,   1.0f,   1.0f}, {0.0f, 0.0f} }, // BOTTOM_LEFT
         });
         
         out->indices = std::vector<IndexType>({
@@ -86,12 +86,32 @@ void GetTriangleMesh(Mesh * out) {
     }
 }
 
-struct {
+void GetQuadMesh(Mesh * out) {
+    if(nullptr != out) {
+        out->vertices = std::vector<Vertex>({
+            { { 0.25f,    0.4f,   0.0f }, {0.5f,   0.3f,   0.6f,   1.0f}, {0.0f, 0.0f} }, // TOP_RIGHT
+            { { -0.25f,   0.4f,   0.0f }, {0.8f,   0.0f,   0.6f,   1.0f}, {0.0f, 0.0f} }, // TOP_LEFT
+            { { 0.25f,   -0.4f,  0.0f },  {0.1f,   0.6f,   0.4f,   1.0f}, {0.0f, 0.0f} }, // BOTTOM_RIGHT
+            { { -0.25f,  -0.4f,  0.0f },  {0,      0.5f,   1.0f,   1.0f}, {0.0f, 0.0f} }, // BOTTOM_LEFT
+        });
+        
+        out->indices = std::vector<IndexType>({
+            1, 2, 3, // LowerLeft Triangle
+            0, 2, 1, // UpperRight Triangle
+        });
+
+    } else {
+        ::printf("GetQuadMesh: out is nullptr");
+    }
+}
+
+struct FrameSync {
+public:
     ID3D12Fence * fence = {};
     HANDLE event = {};
     UINT64 fence_values[frame_queue_length] = {};
     uint32_t frame_index = 0;
-
+public:
     void WaitForQueue(ID3D12CommandQueue * queue) {
         if(nullptr != queue) {
             queue->Signal(fence, fence_values[frame_index]);
@@ -108,7 +128,6 @@ struct {
             ::printf("WaitForQueue(queue): queue is nullptr");
         }
     }
-
     void MoveToNextFrame(ID3D12CommandQueue * queue, IDXGISwapChain4 * swap_chain) {
         if(nullptr != queue) {
             if(nullptr != swap_chain) {
@@ -138,7 +157,6 @@ struct {
         }
 
     }
-
     void Init(ID3D12Device * d3d_device) {
         HRESULT res = d3d_device->CreateFence(fence_values[frame_index], D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence));
         CHECK_AND_FAIL(res);
@@ -149,7 +167,6 @@ struct {
             CHECK_AND_FAIL(res);
         }
     }
-
     void Release() {
         fence->Release();
         CloseHandle(event);
@@ -420,7 +437,7 @@ int main ()
     pixel_shader->Release();
 
     Mesh mesh = {};
-    GetTriangleMesh(&mesh);
+    GetQuadMesh(&mesh);
     
     ID3D12Resource * vertex_buffer = nullptr;
     ID3D12Resource * index_buffer = nullptr;
