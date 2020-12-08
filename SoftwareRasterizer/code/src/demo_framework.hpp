@@ -1,4 +1,5 @@
 #pragma once
+
 #include "common.h"
 
 #if COMPILER_IS_MSVC
@@ -8,7 +9,12 @@
     #pragma warning (disable: 26495)    // Struct member x/y/z/etc. is uninitialized. Always initialize a struct member!
     #pragma warning (disable: 26812)    // normal enum used instead of enum class!
     #pragma warning (disable: 4100)     // unreferenced formal parameter
+    #pragma warning (disable: 4471)     // unscoped enumeration must have an underlying type
 #endif
+
+#include "../dep/include/imgui/imgui.h"
+#include "../dep/include/imgui/backends/imgui_impl_dx12.h"
+#include "../dep/include/imgui/backends/imgui_impl_sdl.h"
 
 class Demo {
 public:
@@ -25,6 +31,7 @@ public:
     };
 
 protected:
+
     virtual bool DoInitRenderer();
     virtual bool DoInitWindow();
     virtual bool DoInitResources() = 0;
@@ -33,6 +40,7 @@ protected:
     virtual bool DoExitResources() = 0;
 
     virtual void OnResize(uint32_t new_width, uint32_t new_height) {}
+    virtual void OnUI() {};
     virtual void OnUpdate() = 0;
     virtual void OnRender() = 0;
     virtual AdapterPreference GetAdapterPreference() const = 0;
@@ -106,6 +114,15 @@ protected:
     
     uint32_t    window_width = 1280;
     uint32_t    window_height = 720;
+
+// ImGui 
+protected:
+    ID3D12DescriptorHeap * g_pd3dSrvDescHeap = nullptr;
+    bool imgui_initialized = false;
+
+    void InitUI(uint32_t frame_queue_length, DXGI_FORMAT render_target_format);
+    void ExitUI();
+    void RenderUI(ID3D12GraphicsCommandList * cmd);
 };
 
 [[nodiscard]] bool

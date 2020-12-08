@@ -11,6 +11,7 @@ class Demo_001_Triangle : public Demo {
 protected:
     virtual bool DoInitResources() override;
     virtual bool DoExitResources() override;
+    virtual void OnUI() override;
     virtual void OnUpdate() override;
     virtual void OnRender() override;
     virtual AdapterPreference GetAdapterPreference() const override { return AdapterPreference::Hardware; };
@@ -447,11 +448,15 @@ bool Demo_001_Triangle::DoInitResources() {
         staging_index_buffer->Release();
     }
 
+    Demo::InitUI(FrameQueueLength, DXGI_FORMAT_R8G8B8A8_UNORM);
+
     return true;
 }
 
 bool Demo_001_Triangle::DoExitResources() { 
     WaitForQueue(direct_queue);
+    
+    Demo::ExitUI();
 
     root_signature->Release();
     graphics_pso->Release();
@@ -479,6 +484,24 @@ bool Demo_001_Triangle::DoExitResources() {
     swap_chain->Release();
 
     return true;
+}
+
+void Demo_001_Triangle::OnUI() {
+    // Start the Dear ImGui frame
+    ImGui_ImplDX12_NewFrame();
+    ImGui_ImplSDL2_NewFrame(render_window.sdl_wnd);
+    ImGui::NewFrame();
+    
+    // Our state
+    static bool show_demo_window = true;
+    ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
+
+    // 1. Show the big demo window (Most of the sample code is in ImGui::ShowDemoWindow()! You can browse its code to learn more about Dear ImGui!).
+    ImGui::ShowDemoWindow(&show_demo_window);
+
+}
+
+void Demo_001_Triangle::OnUpdate() {
 }
 
 void Demo_001_Triangle::OnRender() {
@@ -512,13 +535,13 @@ void Demo_001_Triangle::OnRender() {
         rtv_handle.ptr = rtv_handle.ptr + SIZE_T(frame_index * rtv_handle_increment_size);
 
         // Transition RTV from D3D12_RESOURCE_STATE_PRESENT to D3D12_RESOURCE_STATE_RENDER_TARGET.
-        D3D12_RESOURCE_BARRIER barrier_before_render = {};
-        barrier_before_render.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-        barrier_before_render.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
-        barrier_before_render.Transition.pResource = swap_chain_render_targets[frame_index];
-        barrier_before_render.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
-        barrier_before_render.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
-        current_cmd_list->ResourceBarrier(1, &barrier_before_render);
+        D3D12_RESOURCE_BARRIER barrier = {};
+        barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+        barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+        barrier.Transition.pResource = swap_chain_render_targets[frame_index];
+        barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
+        barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
+        current_cmd_list->ResourceBarrier(1, &barrier);
 
         // Set RenderTargets
         current_cmd_list->OMSetRenderTargets(1, &rtv_handle, FALSE, nullptr);
@@ -547,14 +570,12 @@ void Demo_001_Triangle::OnRender() {
         // Draw Indexed
         current_cmd_list->DrawIndexedInstanced((uint32_t)mesh.indices.size(), 1, 0, 0, 0);
 
+        RenderUI(current_cmd_list);
+
         // Transition RTV from D3D12_RESOURCE_STATE_RENDER_TARGET to D3D12_RESOURCE_STATE_PRESENT
-        D3D12_RESOURCE_BARRIER barrier_before_present = {};
-        barrier_before_present.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-        barrier_before_present.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
-        barrier_before_present.Transition.pResource = swap_chain_render_targets[frame_index];
-        barrier_before_present.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
-        barrier_before_present.Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
-        current_cmd_list->ResourceBarrier(1, &barrier_before_present);
+        barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
+        barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
+        current_cmd_list->ResourceBarrier(1, &barrier);
     }
     current_cmd_list->Close();
 
@@ -568,4 +589,3 @@ void Demo_001_Triangle::OnRender() {
     MoveToNextFrame(direct_queue);
 }
 
-void Demo_001_Triangle::OnUpdate() {}

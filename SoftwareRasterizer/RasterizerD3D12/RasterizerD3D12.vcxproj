@@ -19,6 +19,13 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="..\..\..\..\ocornut\imgui\backends\imgui_impl_dx12.cpp" />
+    <ClCompile Include="..\..\..\..\ocornut\imgui\backends\imgui_impl_sdl.cpp" />
+    <ClCompile Include="..\..\..\..\ocornut\imgui\imgui.cpp" />
+    <ClCompile Include="..\..\..\..\ocornut\imgui\imgui_demo.cpp" />
+    <ClCompile Include="..\..\..\..\ocornut\imgui\imgui_draw.cpp" />
+    <ClCompile Include="..\..\..\..\ocornut\imgui\imgui_tables.cpp" />
+    <ClCompile Include="..\..\..\..\ocornut\imgui\imgui_widgets.cpp" />
     <ClCompile Include="..\code\src\demos\demo_000_nothing.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
       </ExcludedFromBuild>
@@ -29,6 +36,9 @@
     <ClCompile Include="..\code\src\demo_framework.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\..\..\..\ocornut\imgui\backends\imgui_impl_dx12.h" />
+    <ClInclude Include="..\..\..\..\ocornut\imgui\backends\imgui_impl_sdl.h" />
+    <ClInclude Include="..\..\..\..\ocornut\imgui\imgui.h" />
     <ClInclude Include="..\code\src\common.h" />
     <ClInclude Include="..\code\src\demo_framework.hpp" />
   </ItemGroup>
@@ -125,6 +135,8 @@
       <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <TreatWarningAsError>true</TreatWarningAsError>
+      <AdditionalIncludeDirectories>$(SolutionDir)dep\include\imgui;</AdditionalIncludeDirectories>
+      <DisableSpecificWarnings>4471</DisableSpecificWarnings>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -140,6 +152,8 @@
       <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <TreatWarningAsError>true</TreatWarningAsError>
+      <AdditionalIncludeDirectories>$(SolutionDir)dep\include\imgui;</AdditionalIncludeDirectories>
+      <DisableSpecificWarnings>4471</DisableSpecificWarnings>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -154,9 +168,10 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>$(SolutionDir)include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)dep\include\imgui;$(SolutionDir)include</AdditionalIncludeDirectories>
       <TreatWarningAsError>true</TreatWarningAsError>
       <LanguageStandard>stdcpplatest</LanguageStandard>
+      <DisableSpecificWarnings>4471</DisableSpecificWarnings>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -173,6 +188,8 @@
       <ConformanceMode>true</ConformanceMode>
       <TreatWarningAsError>true</TreatWarningAsError>
       <LanguageStandard>stdcpplatest</LanguageStandard>
+      <AdditionalIncludeDirectories>$(SolutionDir)dep\include\imgui;</AdditionalIncludeDirectories>
+      <DisableSpecificWarnings>4471</DisableSpecificWarnings>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>

@@ -71,12 +71,30 @@ void Demo::Exit()
 }
 
 void Demo::Run() {
-    SDL_Event e;
+    SDL_Event event;
     while(false == should_quit) {
-        while(SDL_PollEvent(&e)) {
-            if(SDL_QUIT == e.type) {
+        while(SDL_PollEvent(&event)) {
+            
+            ImGui_ImplSDL2_ProcessEvent(&event);
+
+            if(SDL_QUIT == event.type) {
                 should_quit = true;
             }
+
+            // TODO: Handle Resize
+            /* snippet for resize + handling imgui
+            WaitForLastSubmittedFrame();
+            ImGui_ImplDX12_InvalidateDeviceObjects();
+            CleanupRenderTarget();
+            ResizeSwapChain(hWnd, (UINT)LOWORD(lParam), (UINT)HIWORD(lParam));
+            CreateRenderTarget();
+            ImGui_ImplDX12_CreateDeviceObjects();
+            */
+
+        }
+
+        if(imgui_initialized) {
+            OnUI();
         }
 
         OnUpdate();
@@ -154,7 +172,7 @@ bool Demo::DoInitRenderer() {
     CHECK_AND_FAIL(res);
     res = DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(&compiler));
     CHECK_AND_FAIL(res);
-
+    
     ret = true;
     return ret;
 }
@@ -234,6 +252,52 @@ bool Demo::DoExitWindow() {
     return ret;
 }
 
+void Demo::InitUI(uint32_t frame_queue_length, DXGI_FORMAT render_target_format) {
+    D3D12_DESCRIPTOR_HEAP_DESC desc = {};
+    desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+    desc.NumDescriptors = 1;
+    desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+    HRESULT res = device->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&g_pd3dSrvDescHeap));
+    CHECK_AND_FAIL(res);
+
+    // Setup Dear ImGui context
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGuiIO& io = ImGui::GetIO(); (void)io;
+    //io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
+    //io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
+
+    // Setup Dear ImGui style
+    ImGui::StyleColorsDark();
+    //ImGui::StyleColorsClassic();
+    
+    bool imgui_dx12_init_success = ImGui_ImplDX12_Init(device, frame_queue_length,
+        render_target_format, g_pd3dSrvDescHeap,
+        g_pd3dSrvDescHeap->GetCPUDescriptorHandleForHeapStart(),
+        g_pd3dSrvDescHeap->GetGPUDescriptorHandleForHeapStart());
+
+    ASSERT(imgui_dx12_init_success);
+
+    ImGui_ImplSDL2_InitForD3D(render_window.sdl_wnd);
+
+    imgui_initialized = true;
+}
+
+void Demo::ExitUI() {
+    if (g_pd3dSrvDescHeap) { g_pd3dSrvDescHeap->Release(); g_pd3dSrvDescHeap = NULL; }
+    ImGui_ImplSDL2_Shutdown();
+    ImGui_ImplDX12_Shutdown();
+    ImGui::DestroyContext();
+    imgui_initialized = false;
+}
+
+void Demo::RenderUI(ID3D12GraphicsCommandList * cmd) {
+    // Rendering
+    cmd->SetDescriptorHeaps(1, &g_pd3dSrvDescHeap);
+    ImGui::Render();
+    ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), cmd);
+}
+
 bool Demo_Register(char const * name, std::function<Demo*()> demo_factory) {
     bool ret = false;
     DemoState * demo_state = GetDemoState();
@@ -269,6 +333,7 @@ int main(int argc, char * argv[]) {
         ::printf("Selected Demo is %s (#%u)\n", demo.name, demo_state->current_index);
         demo.instance = demo.factory();
         if(nullptr != demo.instance) {
+            demo.instance->SetWindowTitle(demo.name);
             demo.instance->Init();
             demo.instance->Run();
             demo.instance->Exit();

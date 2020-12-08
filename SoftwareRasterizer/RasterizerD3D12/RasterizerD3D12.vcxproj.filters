@@ -18,6 +18,9 @@
     <Filter Include="Source Files\shaders\demo_001">
       <UniqueIdentifier>{e75a7d06-180f-4cfa-9a10-bc1d320bfa01}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source Files\imgui">
+      <UniqueIdentifier>{2808f9aa-2fcb-4b69-9f74-bd69710b9881}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\code\src\demo_framework.cpp">
@@ -29,6 +32,27 @@
     <ClCompile Include="..\code\src\demos\demo_001_triangle.cpp">
       <Filter>Source Files\demos</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\..\..\ocornut\imgui\imgui_widgets.cpp">
+      <Filter>Source Files\imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\..\ocornut\imgui\imgui.cpp">
+      <Filter>Source Files\imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\..\ocornut\imgui\imgui_demo.cpp">
+      <Filter>Source Files\imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\..\ocornut\imgui\imgui_draw.cpp">
+      <Filter>Source Files\imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\..\ocornut\imgui\imgui_tables.cpp">
+      <Filter>Source Files\imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\..\ocornut\imgui\backends\imgui_impl_dx12.cpp">
+      <Filter>Source Files\imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\..\ocornut\imgui\backends\imgui_impl_sdl.cpp">
+      <Filter>Source Files\imgui</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\code\src\common.h">
@@ -37,13 +61,18 @@
     <ClInclude Include="..\code\src\demo_framework.hpp">
       <Filter>Source Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\..\..\ocornut\imgui\imgui.h">
+      <Filter>Source Files\imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\..\ocornut\imgui\backends\imgui_impl_sdl.h">
+      <Filter>Source Files\imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\..\ocornut\imgui\backends\imgui_impl_dx12.h">
+      <Filter>Source Files\imgui</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <FxCompile Include="..\code\src\shaders\demo001\simple_mesh.vert.hlsl">
-      <Filter>Source Files\shaders\demo_001</Filter>
-    </FxCompile>
-    <FxCompile Include="..\code\src\shaders\demo001\simple_mesh.frag.hlsl">
-      <Filter>Source Files\shaders\demo_001</Filter>
-    </FxCompile>
+    <Text Include="..\code\src\shaders\demo001\simple_mesh.frag.hlsl" />
+    <Text Include="..\code\src\shaders\demo001\simple_mesh.vert.hlsl" />
   </ItemGroup>
 </Project>
