@@ -19,6 +19,11 @@ public:
     void Run();
     void SetWindowTitle(char const * title) { window_title = title; }
 
+    enum class AdapterPreference {
+        Hardware, // GPU Physical Device
+        Software, // WARP
+    };
+
 protected:
     virtual bool DoInitRenderer();
     virtual bool DoInitWindow();
@@ -30,6 +35,7 @@ protected:
     virtual void OnResize(uint32_t new_width, uint32_t new_height) {}
     virtual void OnUpdate() = 0;
     virtual void OnRender() = 0;
+    virtual AdapterPreference GetAdapterPreference() const = 0;
     virtual char const * GetWindowTitle() const { return window_title; }
 
     // Helpers

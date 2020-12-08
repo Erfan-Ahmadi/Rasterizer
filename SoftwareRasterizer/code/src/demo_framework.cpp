@@ -98,7 +98,7 @@ bool Demo::DoInitRenderer() {
 
     // Query Adapter (PhysicalDevice)
     CHECK_AND_FAIL(CreateDXGIFactory2(dxgiFactoryFlags, IID_PPV_ARGS(&dxgi_factory)));
-
+    
     constexpr uint32_t MaxAdapters = 8;
     IDXGIAdapter * adapters[MaxAdapters] = {};
     IDXGIAdapter * pAdapter;
@@ -113,10 +113,21 @@ bool Demo::DoInitRenderer() {
         }
     }
 
-    // Create Logical Device
-    auto res = D3D12CreateDevice(adapters[0], D3D_FEATURE_LEVEL_12_0, IID_PPV_ARGS(&device));
-    CHECK_AND_FAIL(res);
+    HRESULT res;
+    AdapterPreference preference = GetAdapterPreference();
+    if(AdapterPreference::Hardware == preference) {
+        // Create Logical Device
+        res = D3D12CreateDevice(adapters[0], D3D_FEATURE_LEVEL_12_0, IID_PPV_ARGS(&device));
+        CHECK_AND_FAIL(res);
     
+    } else if(AdapterPreference::Software == preference) {
+        IDXGIAdapter * warp_adapter = nullptr;
+        dxgi_factory->EnumWarpAdapter(IID_PPV_ARGS(&warp_adapter));
+        res = D3D12CreateDevice(warp_adapter, D3D_FEATURE_LEVEL_12_0, IID_PPV_ARGS(&device));
+        CHECK_AND_FAIL(res);
+        warp_adapter->Release();
+    }
+
     for (uint32_t i = 0; i < MaxAdapters; ++i) {
         if(nullptr != adapters[i]) {
             adapters[i]->Release();

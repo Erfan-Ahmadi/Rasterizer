@@ -11,8 +11,9 @@ class Demo_001_Triangle : public Demo {
 protected:
     virtual bool DoInitResources() override;
     virtual bool DoExitResources() override;
-    virtual void OnRender() override;
     virtual void OnUpdate() override;
+    virtual void OnRender() override;
+    virtual AdapterPreference GetAdapterPreference() const override { return AdapterPreference::Hardware; };
 
 private:
     void GetTriangleMesh(Mesh * out) {
