@@ -75,7 +75,9 @@ void Demo::Run() {
     while(false == should_quit) {
         while(SDL_PollEvent(&event)) {
             
-            ImGui_ImplSDL2_ProcessEvent(&event);
+            if(imgui_initialized) {
+                ImGui_ImplSDL2_ProcessEvent(&event);
+            }
 
             if(SDL_QUIT == event.type) {
                 should_quit = true;
