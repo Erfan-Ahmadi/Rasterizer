@@ -53,6 +53,9 @@
     <ClCompile Include="..\..\..\..\ocornut\imgui\backends\imgui_impl_sdl.cpp">
       <Filter>Source Files\imgui</Filter>
     </ClCompile>
+    <ClCompile Include="..\code\src\demos\demo_002_texturing.cpp">
+      <Filter>Source Files\demos</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\code\src\common.h">
