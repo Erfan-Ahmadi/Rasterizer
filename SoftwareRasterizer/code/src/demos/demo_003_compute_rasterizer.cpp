@@ -757,7 +757,7 @@ bool Demo_003_RasterizerCompute::DoInitResources() {
 
     Init_Rasterization();
 
-    Demo::InitUI(FrameQueueLength, DXGI_FORMAT_R8G8B8A8_UNORM);
+    // Demo::InitUI(FrameQueueLength, DXGI_FORMAT_R8G8B8A8_UNORM);
 
     return true;
 }
@@ -765,7 +765,7 @@ bool Demo_003_RasterizerCompute::DoInitResources() {
 bool Demo_003_RasterizerCompute::DoExitResources() { 
     WaitForQueue(direct_queue);
     
-    Demo::ExitUI();
+    // Demo::ExitUI();
 
     Exit_Rasterization();
 
@@ -820,92 +820,122 @@ void Demo_003_RasterizerCompute::OnRender() {
     ID3D12GraphicsCommandList * current_cmd_list = direct_cmd_list[frame_index];
     current_cmd_list->Reset(direct_cmd_allocator, nullptr);
     {
-        current_cmd_list->SetComputeRootSignature(fragment_shading_pass.root_signature);
-        current_cmd_list->SetPipelineState(fragment_shading_pass.compute_pso);
-        current_cmd_list->SetDescriptorHeaps(1, &cbv_srv_uav_heap);
-        current_cmd_list->SetComputeRootDescriptorTable(0, fragment_shading_pass.descriptor_table_start[frame_index]);
-        constexpr uint32_t thread_group_size_x = 16;
-        constexpr uint32_t thread_group_size_y = 16;
-        constexpr uint32_t thread_group_size_z = 1;
-        uint32_t thread_group_count_x = (window_width / thread_group_size_x) + 1;
-        uint32_t thread_group_count_y = (window_height / thread_group_size_y) + 1;
-        uint32_t thread_group_count_z = 1;
-        current_cmd_list->Dispatch(thread_group_count_x, thread_group_count_y, thread_group_count_z);
-        
-        // UAV Barrier
-        D3D12_RESOURCE_BARRIER uav_barrier = {};
-        uav_barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
-        uav_barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
-        uav_barrier.UAV.pResource = frame_buffer[frame_index];
-        current_cmd_list->ResourceBarrier(1, &uav_barrier);
-
-        current_cmd_list->SetGraphicsRootSignature(root_signature);
-        
-        // Set Viewport Scissor
-        {
-            D3D12_VIEWPORT viewport;
-            viewport.TopLeftX = 0;
-            viewport.TopLeftY = 0;
-            viewport.Width = (FLOAT)window_width;
-            viewport.Height = (FLOAT)window_height;
-            viewport.MinDepth = 0.0f;
-            viewport.MaxDepth = 1.0f;
-            current_cmd_list->RSSetViewports(1, &viewport);
-
-            D3D12_RECT scissor_rect = {};
-            scissor_rect.left = 0;
-            scissor_rect.top = 0;
-            scissor_rect.right = window_width;
-            scissor_rect.bottom = window_height;
-            current_cmd_list->RSSetScissorRects(1, &scissor_rect);
-        } 
-
         D3D12_CPU_DESCRIPTOR_HANDLE rtv_handle = rtv_heap->GetCPUDescriptorHandleForHeapStart();
-        rtv_handle.ptr = rtv_handle.ptr + SIZE_T(frame_index * rtv_handle_increment_size);
 
-        // Transition RTV from D3D12_RESOURCE_STATE_PRESENT to D3D12_RESOURCE_STATE_RENDER_TARGET.
-        D3D12_RESOURCE_BARRIER barrier = {};
-        barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-        barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
-        barrier.Transition.pResource = swap_chain_render_targets[frame_index];
-        barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
-        barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
-        current_cmd_list->ResourceBarrier(1, &barrier);
+        constexpr bool use_hardware_rasterization = false;
+        if(false == use_hardware_rasterization) {
 
-        // Set RenderTargets
-        current_cmd_list->OMSetRenderTargets(1, &rtv_handle, FALSE, nullptr);
-        const float clear_color[] = { 0.0f, 0.05f, 0.05f, 1.0f };
-        current_cmd_list->ClearRenderTargetView(rtv_handle, clear_color, 0, nullptr);
+            current_cmd_list->SetComputeRootSignature(fragment_shading_pass.root_signature);
+            current_cmd_list->SetPipelineState(fragment_shading_pass.compute_pso);
+            current_cmd_list->SetDescriptorHeaps(1, &cbv_srv_uav_heap);
+            current_cmd_list->SetComputeRootDescriptorTable(0, fragment_shading_pass.descriptor_table_start[frame_index]);
+            constexpr uint32_t thread_group_size_x = 16;
+            constexpr uint32_t thread_group_size_y = 16;
+            constexpr uint32_t thread_group_size_z = 1;
+            uint32_t thread_group_count_x = (window_width / thread_group_size_x) + 1;
+            uint32_t thread_group_count_y = (window_height / thread_group_size_y) + 1;
+            uint32_t thread_group_count_z = 1;
+            current_cmd_list->Dispatch(thread_group_count_x, thread_group_count_y, thread_group_count_z);
 
-        current_cmd_list->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+            // -> Transition RTV from D3D12_RESOURCE_STATE_PRESENT to D3D12_RESOURCE_STATE_COPY_DEST.
+            D3D12_RESOURCE_BARRIER barriers[2] = {};
+            barriers[0].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+            barriers[0].Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+            barriers[0].Transition.pResource = swap_chain_render_targets[frame_index];
+            barriers[0].Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
+            barriers[0].Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_DEST;
+            barriers[1].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+            barriers[1].Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+            barriers[1].Transition.pResource = frame_buffer[frame_index];
+            barriers[1].Transition.StateBefore = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+            barriers[1].Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_SOURCE;
+            current_cmd_list->ResourceBarrier(2, barriers);
+            
+            D3D12_TEXTURE_COPY_LOCATION dst = {};
+            dst.pResource = swap_chain_render_targets[frame_index];
+            dst.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+            dst.SubresourceIndex = 0;
 
-        // Set Vertex and Index Buffer
+            D3D12_TEXTURE_COPY_LOCATION src = {};
+            src.pResource = frame_buffer[frame_index];
+            src.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+            src.SubresourceIndex = 0;
 
-        D3D12_VERTEX_BUFFER_VIEW vbv = {};
-        vbv.BufferLocation = vertex_buffer->GetGPUVirtualAddress();
-        vbv.SizeInBytes = (uint32_t)vertex_buffer_bytes;
-        vbv.StrideInBytes = sizeof(Vertex);
-        current_cmd_list->IASetVertexBuffers(0, 1, &vbv);
+            current_cmd_list->CopyTextureRegion(&dst, 0, 0, 0, &src, nullptr);
 
-        D3D12_INDEX_BUFFER_VIEW ibv = {};
-        ibv.BufferLocation = index_buffer->GetGPUVirtualAddress();
-        ibv.Format = IndexBufferFormat;
-        ibv.SizeInBytes = (uint32_t)index_buffer_bytes;
-            current_cmd_list->IASetIndexBuffer(&ibv);
+            // -> Transition RTV from D3D12_RESOURCE_STATE_RENDER_TARGET to D3D12_RESOURCE_STATE_PRESENT.
+            barriers[0].Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
+            barriers[0].Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
+            barriers[1].Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_SOURCE;
+            barriers[1].Transition.StateAfter = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+            current_cmd_list->ResourceBarrier(2, barriers);
 
-        // Set PSO
-        current_cmd_list->SetPipelineState(graphics_pso);
+        } else {
+            current_cmd_list->SetGraphicsRootSignature(root_signature);
+            // Set Viewport Scissor
+            {
+                D3D12_VIEWPORT viewport;
+                viewport.TopLeftX = 0;
+                viewport.TopLeftY = 0;
+                viewport.Width = (FLOAT)window_width;
+                viewport.Height = (FLOAT)window_height;
+                viewport.MinDepth = 0.0f;
+                viewport.MaxDepth = 1.0f;
+                current_cmd_list->RSSetViewports(1, &viewport);
 
-        // Draw Indexed
-        current_cmd_list->DrawIndexedInstanced((uint32_t)mesh.indices.size(), 1, 0, 0, 0);
+                D3D12_RECT scissor_rect = {};
+                scissor_rect.left = 0;
+                scissor_rect.top = 0;
+                scissor_rect.right = window_width;
+                scissor_rect.bottom = window_height;
+                current_cmd_list->RSSetScissorRects(1, &scissor_rect);
+            } 
 
-        RenderUI(current_cmd_list);
+            // Transition RTV from D3D12_RESOURCE_STATE_PRESENT to D3D12_RESOURCE_STATE_RENDER_TARGET.
+            D3D12_RESOURCE_BARRIER barrier = {};
+            barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+            barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+            barrier.Transition.pResource = swap_chain_render_targets[frame_index];
+            barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
+            barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
+            current_cmd_list->ResourceBarrier(1, &barrier);
 
-        // Transition RTV from D3D12_RESOURCE_STATE_RENDER_TARGET to D3D12_RESOURCE_STATE_PRESENT
-        barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
-        barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
-        current_cmd_list->ResourceBarrier(1, &barrier);
+            // Set RenderTargets
+            current_cmd_list->OMSetRenderTargets(1, &rtv_handle, FALSE, nullptr);
+            const float clear_color[] = { 0.0f, 0.05f, 0.05f, 1.0f };
+            current_cmd_list->ClearRenderTargetView(rtv_handle, clear_color, 0, nullptr);
+
+            current_cmd_list->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+            // Set Vertex and Index Buffer
+
+            D3D12_VERTEX_BUFFER_VIEW vbv = {};
+            vbv.BufferLocation = vertex_buffer->GetGPUVirtualAddress();
+            vbv.SizeInBytes = (uint32_t)vertex_buffer_bytes;
+            vbv.StrideInBytes = sizeof(Vertex);
+            current_cmd_list->IASetVertexBuffers(0, 1, &vbv);
+
+            D3D12_INDEX_BUFFER_VIEW ibv = {};
+            ibv.BufferLocation = index_buffer->GetGPUVirtualAddress();
+            ibv.Format = IndexBufferFormat;
+            ibv.SizeInBytes = (uint32_t)index_buffer_bytes;
+                current_cmd_list->IASetIndexBuffer(&ibv);
+
+            // Set PSO
+            current_cmd_list->SetPipelineState(graphics_pso);
+
+            // Draw Indexed
+            current_cmd_list->DrawIndexedInstanced((uint32_t)mesh.indices.size(), 1, 0, 0, 0);
+
+            RenderUI(current_cmd_list);
+            
+            // Transition RTV from D3D12_RESOURCE_STATE_RENDER_TARGET to D3D12_RESOURCE_STATE_PRESENT.
+            barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
+            barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
+            current_cmd_list->ResourceBarrier(1, &barrier);
+        }
     }
+
     current_cmd_list->Close();
     // Execute Command List
     ID3D12CommandList * execute_cmds[1] = { current_cmd_list };
