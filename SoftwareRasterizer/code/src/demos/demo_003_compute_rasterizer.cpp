@@ -757,7 +757,7 @@ bool Demo_003_RasterizerCompute::DoInitResources() {
 
     Init_Rasterization();
 
-    // Demo::InitUI(FrameQueueLength, DXGI_FORMAT_R8G8B8A8_UNORM);
+    Demo::InitUI(FrameQueueLength, DXGI_FORMAT_R8G8B8A8_UNORM);
 
     return true;
 }
@@ -765,7 +765,7 @@ bool Demo_003_RasterizerCompute::DoInitResources() {
 bool Demo_003_RasterizerCompute::DoExitResources() { 
     WaitForQueue(direct_queue);
     
-    // Demo::ExitUI();
+    Demo::ExitUI();
 
     Exit_Rasterization();
 
@@ -821,6 +821,7 @@ void Demo_003_RasterizerCompute::OnRender() {
     current_cmd_list->Reset(direct_cmd_allocator, nullptr);
     {
         D3D12_CPU_DESCRIPTOR_HANDLE rtv_handle = rtv_heap->GetCPUDescriptorHandleForHeapStart();
+        rtv_handle.ptr = rtv_handle.ptr + SIZE_T(frame_index * rtv_handle_increment_size);
 
         constexpr bool use_hardware_rasterization = false;
         if(false == use_hardware_rasterization) {
@@ -863,8 +864,18 @@ void Demo_003_RasterizerCompute::OnRender() {
 
             current_cmd_list->CopyTextureRegion(&dst, 0, 0, 0, &src, nullptr);
 
-            // -> Transition RTV from D3D12_RESOURCE_STATE_RENDER_TARGET to D3D12_RESOURCE_STATE_PRESENT.
+            // -> Transition RTV from D3D12_RESOURCE_STATE_COPY_DEST to D3D12_RESOURCE_STATE_RENDER_TARGET.
             barriers[0].Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
+            barriers[0].Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
+            current_cmd_list->ResourceBarrier(1, barriers);
+            
+            // Set RenderTargets
+            current_cmd_list->OMSetRenderTargets(1, &rtv_handle, FALSE, nullptr);
+
+            RenderUI(current_cmd_list);
+
+            // -> Transition RTV from D3D12_RESOURCE_STATE_RENDER_TARGET to D3D12_RESOURCE_STATE_PRESENT.
+            barriers[0].Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
             barriers[0].Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
             barriers[1].Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_SOURCE;
             barriers[1].Transition.StateAfter = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
