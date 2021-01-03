@@ -1,5 +1,6 @@
 # Rasterizer
-SoftwareRasterizer with D3D12 for Graphics and Compute and Hardware Rasterization
++ SoftwareRasterizer on GPU with D3D12 ComputePipeline/Shader
++ HardwareRasterization on GPU with GraphicsPipeline
 
 ## Motivation
 
