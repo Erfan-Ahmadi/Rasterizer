@@ -173,7 +173,7 @@
       <AdditionalIncludeDirectories>$(SolutionDir)dep\include\imgui;$(SolutionDir)include</AdditionalIncludeDirectories>
       <TreatWarningAsError>true</TreatWarningAsError>
       <LanguageStandard>stdcpplatest</LanguageStandard>
-      <DisableSpecificWarnings>4471</DisableSpecificWarnings>
+      <DisableSpecificWarnings>4471;4127</DisableSpecificWarnings>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -191,7 +191,7 @@
       <TreatWarningAsError>true</TreatWarningAsError>
       <LanguageStandard>stdcpplatest</LanguageStandard>
       <AdditionalIncludeDirectories>$(SolutionDir)dep\include\imgui;</AdditionalIncludeDirectories>
-      <DisableSpecificWarnings>4471</DisableSpecificWarnings>
+      <DisableSpecificWarnings>4471;4127</DisableSpecificWarnings>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>

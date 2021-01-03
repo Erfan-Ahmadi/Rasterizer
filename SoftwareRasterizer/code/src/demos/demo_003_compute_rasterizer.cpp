@@ -128,8 +128,12 @@ private:
         uint8_t     col[3];
         float       uv[2];
     };
-    ID3D12Resource * fragment_buffer = nullptr;
-    
+
+    // Resources 
+
+    ID3D12Resource * fragment_buffer[FrameQueueLength] = {};
+    ID3D12Resource * frame_buffer[FrameQueueLength] = {};
+
     ID3D12DescriptorHeap * cbv_srv_uav_heap = nullptr;
 
     struct
@@ -142,6 +146,7 @@ private:
     {
         ID3D12PipelineState * compute_pso = nullptr;
         ID3D12RootSignature * root_signature = nullptr;
+        D3D12_GPU_DESCRIPTOR_HANDLE descriptor_table_start[FrameQueueLength];
     } fragment_shading_pass;
 
     // 1. Clear FrameBuffer with Color and Depth
@@ -162,18 +167,50 @@ private:
             descriptor_heap_desc.NodeMask = 0;
             device->CreateDescriptorHeap(&descriptor_heap_desc, IID_PPV_ARGS(&cbv_srv_uav_heap));
         }
-        
-        //// Buffer Allocation
-        //uint32_t fragment_buffer_bytes = window_width * window_height * sizeof(Fragment);
-        //D3D12_HEAP_PROPERTIES   heap_props      = GetDefaultHeapProps(D3D12_HEAP_TYPE_DEFAULT);
-        //D3D12_RESOURCE_DESC     resource_desc   = GetBufferResourceDesc(fragment_buffer_bytes);
-        //HRESULT res = device->CreateCommittedResource(&heap_props,
-        //    D3D12_HEAP_FLAG_NONE,
-        //    &resource_desc,
-        //    D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
-        //    nullptr,
-        //    IID_PPV_ARGS(&fragment_buffer));
-        //CHECK_AND_FAIL(res);
+        D3D12_CPU_DESCRIPTOR_HANDLE current_cpu_handle = cbv_srv_uav_heap->GetCPUDescriptorHandleForHeapStart();
+        D3D12_GPU_DESCRIPTOR_HANDLE current_gpu_handle = cbv_srv_uav_heap->GetGPUDescriptorHandleForHeapStart();
+                
+        D3D12_HEAP_PROPERTIES   default_heap_props      = GetDefaultHeapProps(D3D12_HEAP_TYPE_DEFAULT);
+
+        // Buffer Allocation
+        uint32_t fragment_buffer_bytes = window_width * window_height * sizeof(Fragment);
+        D3D12_RESOURCE_DESC     resource_desc   = GetBufferResourceDesc(fragment_buffer_bytes);
+        resource_desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+
+        for(uint32_t i = 0; i < FrameQueueLength; ++i) {
+            res = device->CreateCommittedResource(&default_heap_props,
+                D3D12_HEAP_FLAG_NONE,
+                &resource_desc,
+                D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+                nullptr,
+                IID_PPV_ARGS(&fragment_buffer[i]));
+            CHECK_AND_FAIL(res);
+        }
+
+        // FrameBuffer Texture Allocation
+                
+        D3D12_RESOURCE_DESC texture_resource_desc = {};
+        texture_resource_desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+        texture_resource_desc.Alignment = 0;
+        texture_resource_desc.Width = window_width;
+        texture_resource_desc.Height = window_height;
+        texture_resource_desc.DepthOrArraySize = 1;
+        texture_resource_desc.MipLevels = 1;
+        texture_resource_desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        texture_resource_desc.SampleDesc.Count = 1;
+        texture_resource_desc.SampleDesc.Quality = 0;
+        texture_resource_desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+        texture_resource_desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+
+        for(uint32_t i = 0; i < FrameQueueLength; ++i) {
+            res = device->CreateCommittedResource(&default_heap_props,
+                D3D12_HEAP_FLAG_NONE,
+                &texture_resource_desc,
+                D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+                nullptr,
+                IID_PPV_ARGS(&frame_buffer[i]));
+            CHECK_AND_FAIL(res);
+        }
 
         // Rasterizer Pass
         {
@@ -301,12 +338,44 @@ private:
                 device->CreateComputePipelineState(&pso_desc, IID_PPV_ARGS(&fragment_shading_pass.compute_pso));
             }
             compute_shader->Release();
+            
+            // Create SRV+UAV(Fragments+Framebuffer)
+            {
+                for(uint32_t i = 0; i < FrameQueueLength; ++i) {
+
+                    fragment_shading_pass.descriptor_table_start[i] = current_gpu_handle;
+                    
+                    D3D12_UNORDERED_ACCESS_VIEW_DESC uav_desc = {};
+                    uav_desc.Format = texture_resource_desc.Format;
+                    uav_desc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
+                    uav_desc.Texture2D.MipSlice = 0;
+                    uav_desc.Texture2D.PlaneSlice = 0;
+                    device->CreateUnorderedAccessView(frame_buffer[i], nullptr, &uav_desc, current_cpu_handle);
+                    current_cpu_handle.ptr += device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+                    current_gpu_handle.ptr += device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+
+                    D3D12_SHADER_RESOURCE_VIEW_DESC srv_desc = {};
+                    srv_desc.Format = DXGI_FORMAT_UNKNOWN;
+                    srv_desc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
+                    srv_desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+                    srv_desc.Buffer.FirstElement = 0;
+                    srv_desc.Buffer.NumElements = window_width * window_height;
+                    srv_desc.Buffer.StructureByteStride = sizeof(Fragment);
+                    srv_desc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
+                    device->CreateShaderResourceView(fragment_buffer[i], &srv_desc, current_cpu_handle);
+                    current_cpu_handle.ptr += device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+                    current_gpu_handle.ptr += device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+                }
+            }
         }
     }
-
     void Exit_Rasterization () {
+        
+        for(uint32_t i = 0; i < FrameQueueLength; ++i) {
+            frame_buffer[i]->Release();
+            fragment_buffer[i]->Release();
+        }
 
-        fragment_buffer->Release();
         cbv_srv_uav_heap->Release();
 
         // Rasterizer Pass
@@ -320,7 +389,6 @@ private:
             fragment_shading_pass.compute_pso->Release();
             fragment_shading_pass.root_signature->Release();
         }
-
     }
 
     void WaitForQueue(ID3D12CommandQueue * queue) {
@@ -748,13 +816,31 @@ void Demo_003_RasterizerCompute::OnUpdate() {
 }
 
 void Demo_003_RasterizerCompute::OnRender() {
-
     // Populate Command List
     ID3D12GraphicsCommandList * current_cmd_list = direct_cmd_list[frame_index];
     current_cmd_list->Reset(direct_cmd_allocator, nullptr);
     {
+        current_cmd_list->SetComputeRootSignature(fragment_shading_pass.root_signature);
+        current_cmd_list->SetPipelineState(fragment_shading_pass.compute_pso);
+        current_cmd_list->SetDescriptorHeaps(1, &cbv_srv_uav_heap);
+        current_cmd_list->SetComputeRootDescriptorTable(0, fragment_shading_pass.descriptor_table_start[frame_index]);
+        constexpr uint32_t thread_group_size_x = 16;
+        constexpr uint32_t thread_group_size_y = 16;
+        constexpr uint32_t thread_group_size_z = 1;
+        uint32_t thread_group_count_x = (window_width / thread_group_size_x) + 1;
+        uint32_t thread_group_count_y = (window_height / thread_group_size_y) + 1;
+        uint32_t thread_group_count_z = 1;
+        current_cmd_list->Dispatch(thread_group_count_x, thread_group_count_y, thread_group_count_z);
+        
+        // UAV Barrier
+        D3D12_RESOURCE_BARRIER uav_barrier = {};
+        uav_barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
+        uav_barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+        uav_barrier.UAV.pResource = frame_buffer[frame_index];
+        current_cmd_list->ResourceBarrier(1, &uav_barrier);
+
         current_cmd_list->SetGraphicsRootSignature(root_signature);
-            
+        
         // Set Viewport Scissor
         {
             D3D12_VIEWPORT viewport;
@@ -821,7 +907,6 @@ void Demo_003_RasterizerCompute::OnRender() {
         current_cmd_list->ResourceBarrier(1, &barrier);
     }
     current_cmd_list->Close();
-
     // Execute Command List
     ID3D12CommandList * execute_cmds[1] = { current_cmd_list };
     direct_queue->ExecuteCommandLists(1, execute_cmds);
