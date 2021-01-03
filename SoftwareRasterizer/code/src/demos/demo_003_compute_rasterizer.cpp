@@ -1,15 +1,11 @@
 /*
-- DEMO_002
-- Texturing
+- DEMO_001
+- Triangle
 */
 
 #include "../demo_framework.hpp"
 
-#define STBI_WINDOWS_UTF8
-#define STB_IMAGE_IMPLEMENTATION
-#include "../dep/include/stb/stb_image.h"
-
-class Demo_002_Texturing : public Demo {
+class Demo_003_RasterizerCompute : public Demo {
 protected:
     virtual bool DoInitResources() override;
     virtual bool DoExitResources() override;
@@ -38,10 +34,10 @@ private:
     void GetQuadMesh(Mesh * out) {
         if(nullptr != out) {
             out->vertices = std::vector<Vertex>({
-                { { 0.25f,    0.4f,   0.0f }, {uint8_t(255 * 0.5f),   uint8_t(255 * 0.3f),   uint8_t(255 * 0.6f), 255}, {1.0f, 0.0f} }, // TOP_RIGHT
+                { { 0.25f,    0.4f,   0.0f }, {uint8_t(255 * 0.5f),   uint8_t(255 * 0.3f),   uint8_t(255 * 0.6f), 255}, {0.0f, 0.0f} }, // TOP_RIGHT
                 { { -0.25f,   0.4f,   0.0f }, {uint8_t(255 * 0.8f),   uint8_t(255 * 0.0f),   uint8_t(255 * 0.6f), 255}, {0.0f, 0.0f} }, // TOP_LEFT
-                { { 0.25f,   -0.4f,  0.0f },  {uint8_t(255 * 0.1f),   uint8_t(255 * 0.6f),   uint8_t(255 * 0.4f), 255}, {1.0f, 1.0f} }, // BOTTOM_RIGHT
-                { { -0.25f,  -0.4f,  0.0f },  {uint8_t(255 * 0  ),    uint8_t(255 * 0.5f),   uint8_t(255 * 1.0f), 255}, {0.0f, 1.0f} }, // BOTTOM_LEFT
+                { { 0.25f,   -0.4f,  0.0f },  {uint8_t(255 * 0.1f),   uint8_t(255 * 0.6f),   uint8_t(255 * 0.4f), 255}, {0.0f, 0.0f} }, // BOTTOM_RIGHT
+                { { -0.25f,  -0.4f,  0.0f },  {uint8_t(255 * 0  ),    uint8_t(255 * 0.5f),   uint8_t(255 * 1.0f), 255}, {0.0f, 0.0f} }, // BOTTOM_LEFT
             });
         
             out->indices = std::vector<IndexType>({
@@ -68,11 +64,6 @@ private:
     ID3D12GraphicsCommandList * direct_cmd_list [FrameQueueLength] = {};
     ID3D12GraphicsCommandList * copy_cmd_list = nullptr;
 
-    // Used for Texture
-    ID3D12Resource * my_texture_resource = nullptr;
-    ID3D12DescriptorHeap * cbv_srv_uav_heap = nullptr;
-    uint32_t cbv_srv_uav_handle_increment_size = 0;
-
     ID3D12DescriptorHeap * rtv_heap = nullptr;
     uint32_t rtv_handle_increment_size = 0;
 
@@ -90,6 +81,247 @@ private:
     HANDLE event = {};
     UINT64 fence_values[FrameQueueLength] = {};
     uint32_t frame_index = 0;
+    
+    // Rasterization Stuff
+    
+    struct ModelUniform {
+        DirectX::XMFLOAT4X4 model_mat;
+        DirectX::XMFLOAT4X4 model_inverse_transpose_mat;
+    };
+
+    struct VertexShaderUniform {
+        DirectX::XMFLOAT4X4 view_mat;
+        DirectX::XMFLOAT4X4 proj_mat;
+    };
+
+    // Input to Vertex Shader / Optional
+    struct InputVertexAttributes {
+        float       pos_world[3];
+        float       normal_world[3];
+        uint8_t     col[3];
+        float       uv[2];
+    };
+
+    // Vertex Shader Output
+    // Primitive Assembly Input
+    struct OutputVertexAttributes {
+        float       pos_ndc[3];
+        float       pos_world[3];
+        float       normal_world[3];
+        uint8_t     col[3];
+        float       uv[2];
+    };
+
+    // Primitive Assembly Output
+    // Rasterization Input
+    struct Primitive {
+        OutputVertexAttributes vertices[3];
+    };
+
+    // Rasterization Output
+    // Fragment Shader Input
+    struct Fragment {
+        // Interpolated Values from OutputVertexAttributes
+        float       pos_ndc[3];
+        float       pos_world[3];
+        float       normal_world[3];
+        uint8_t     col[3];
+        float       uv[2];
+    };
+    ID3D12Resource * fragment_buffer = nullptr;
+    
+    ID3D12DescriptorHeap * cbv_srv_uav_heap = nullptr;
+
+    struct
+    {
+        ID3D12PipelineState * compute_pso = nullptr;
+        ID3D12RootSignature * root_signature = nullptr;
+    } rasterizer_pass;
+    
+    struct
+    {
+        ID3D12PipelineState * compute_pso = nullptr;
+        ID3D12RootSignature * root_signature = nullptr;
+    } fragment_shading_pass;
+
+    // 1. Clear FrameBuffer with Color and Depth
+    // 2. Vertex Shader
+    // 3. Primitive Assembly
+    // 4. Rasterizer
+    // 5. FragmentShader
+
+    void Init_Rasterization () {
+        HRESULT res = {};
+
+        // Create Descriptor Heap : D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV
+        {
+            D3D12_DESCRIPTOR_HEAP_DESC descriptor_heap_desc = {};
+            descriptor_heap_desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+            descriptor_heap_desc.NumDescriptors = 10;
+            descriptor_heap_desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+            descriptor_heap_desc.NodeMask = 0;
+            device->CreateDescriptorHeap(&descriptor_heap_desc, IID_PPV_ARGS(&cbv_srv_uav_heap));
+        }
+        
+        //// Buffer Allocation
+        //uint32_t fragment_buffer_bytes = window_width * window_height * sizeof(Fragment);
+        //D3D12_HEAP_PROPERTIES   heap_props      = GetDefaultHeapProps(D3D12_HEAP_TYPE_DEFAULT);
+        //D3D12_RESOURCE_DESC     resource_desc   = GetBufferResourceDesc(fragment_buffer_bytes);
+        //HRESULT res = device->CreateCommittedResource(&heap_props,
+        //    D3D12_HEAP_FLAG_NONE,
+        //    &resource_desc,
+        //    D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+        //    nullptr,
+        //    IID_PPV_ARGS(&fragment_buffer));
+        //CHECK_AND_FAIL(res);
+
+        // Rasterizer Pass
+        {
+            IDxcBlob * compute_shader = Demo::CompileShaderFromFile(L"../code/src/shaders/demo003/rasterizer.comp.hlsl", L"main", L"cs_6_0");
+            ASSERT(nullptr != compute_shader);
+
+            // Create Root Signature
+            {
+                D3D12_DESCRIPTOR_RANGE1 descriptor_range = {};
+                descriptor_range.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
+                descriptor_range.NumDescriptors = 1;
+                // : register(u0, space1)
+                descriptor_range.BaseShaderRegister = 0;
+                descriptor_range.RegisterSpace = 1;
+                descriptor_range.Flags = D3D12_DESCRIPTOR_RANGE_FLAG_NONE;
+                descriptor_range.OffsetInDescriptorsFromTableStart = 0;
+
+                constexpr uint32_t NumParameters = 1;
+                D3D12_ROOT_PARAMETER1 parameters[NumParameters] = {};
+                parameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+                parameters[0].DescriptorTable.NumDescriptorRanges = 1;
+                parameters[0].DescriptorTable.pDescriptorRanges = &descriptor_range;
+
+                ID3DBlob * rs_blob = nullptr;
+                ID3DBlob * rs_error_blob = nullptr;
+                D3D12_VERSIONED_ROOT_SIGNATURE_DESC root_signature_desc = {};
+                root_signature_desc.Version = D3D_ROOT_SIGNATURE_VERSION_1_1;
+                root_signature_desc.Desc_1_1 = {};
+                root_signature_desc.Desc_1_1.Flags = D3D12_ROOT_SIGNATURE_FLAG_NONE;
+                root_signature_desc.Desc_1_1.NumStaticSamplers = 0;
+                root_signature_desc.Desc_1_1.pStaticSamplers = nullptr;
+        
+                root_signature_desc.Desc_1_1.NumParameters = NumParameters;
+                root_signature_desc.Desc_1_1.pParameters = parameters;
+        
+                res = D3D12SerializeVersionedRootSignature(&root_signature_desc, &rs_blob, &rs_error_blob);
+                CHECK_AND_FAIL(res);
+                if(nullptr != rs_error_blob) {
+                    ASSERT(nullptr != rs_error_blob);
+                    rs_error_blob->Release();
+                }
+
+                res = device->CreateRootSignature(0, rs_blob->GetBufferPointer(), rs_blob->GetBufferSize(), IID_PPV_ARGS(&rasterizer_pass.root_signature));
+                CHECK_AND_FAIL(res);
+
+                rs_blob->Release();
+            }
+            // Create PSO for Compute 
+            {
+                D3D12_COMPUTE_PIPELINE_STATE_DESC pso_desc = {};
+                pso_desc.pRootSignature = rasterizer_pass.root_signature;
+                pso_desc.CS.pShaderBytecode = compute_shader->GetBufferPointer();
+                pso_desc.CS.BytecodeLength = compute_shader->GetBufferSize();
+                pso_desc.NodeMask = 0;
+                pso_desc.CachedPSO = {};
+                pso_desc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
+                device->CreateComputePipelineState(&pso_desc, IID_PPV_ARGS(&rasterizer_pass.compute_pso));
+            }
+            compute_shader->Release();
+        }
+
+        // Fragment Shading Pass
+        {
+            IDxcBlob * compute_shader = Demo::CompileShaderFromFile(L"../code/src/shaders/demo003/fragment_shader.comp.hlsl", L"main", L"cs_6_0");
+            ASSERT(nullptr != compute_shader);
+
+            // Create Root Signature
+            {
+                D3D12_DESCRIPTOR_RANGE1 descriptor_ranges[2] = {};
+                descriptor_ranges[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
+                descriptor_ranges[0].NumDescriptors = 1;
+                // : register(u0, space1)
+                descriptor_ranges[0].BaseShaderRegister = 0;
+                descriptor_ranges[0].RegisterSpace = 1;
+                descriptor_ranges[0].Flags = D3D12_DESCRIPTOR_RANGE_FLAG_NONE;
+                descriptor_ranges[0].OffsetInDescriptorsFromTableStart = 0;
+
+                descriptor_ranges[1].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+                descriptor_ranges[1].NumDescriptors = 1;
+                // : register(t0, space1)
+                descriptor_ranges[1].BaseShaderRegister = 0;
+                descriptor_ranges[1].RegisterSpace = 1;
+                descriptor_ranges[1].Flags = D3D12_DESCRIPTOR_RANGE_FLAG_NONE;
+                descriptor_ranges[1].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+                constexpr uint32_t NumParameters = 1;
+                D3D12_ROOT_PARAMETER1 parameters[NumParameters] = {};
+                parameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+                parameters[0].DescriptorTable.NumDescriptorRanges = 2;
+                parameters[0].DescriptorTable.pDescriptorRanges = descriptor_ranges;
+
+                ID3DBlob * rs_blob = nullptr;
+                ID3DBlob * rs_error_blob = nullptr;
+                D3D12_VERSIONED_ROOT_SIGNATURE_DESC root_signature_desc = {};
+                root_signature_desc.Version = D3D_ROOT_SIGNATURE_VERSION_1_1;
+                root_signature_desc.Desc_1_1 = {};
+                root_signature_desc.Desc_1_1.Flags = D3D12_ROOT_SIGNATURE_FLAG_NONE;
+                root_signature_desc.Desc_1_1.NumStaticSamplers = 0;
+                root_signature_desc.Desc_1_1.pStaticSamplers = nullptr;
+        
+                root_signature_desc.Desc_1_1.NumParameters = NumParameters;
+                root_signature_desc.Desc_1_1.pParameters = parameters;
+        
+                res = D3D12SerializeVersionedRootSignature(&root_signature_desc, &rs_blob, &rs_error_blob);
+                CHECK_AND_FAIL(res);
+                if(nullptr != rs_error_blob) {
+                    ASSERT(nullptr != rs_error_blob);
+                    rs_error_blob->Release();
+                }
+
+                res = device->CreateRootSignature(0, rs_blob->GetBufferPointer(), rs_blob->GetBufferSize(), IID_PPV_ARGS(&fragment_shading_pass.root_signature));
+                CHECK_AND_FAIL(res);
+
+                rs_blob->Release();
+            }
+            // Create PSO for Compute 
+            {
+                D3D12_COMPUTE_PIPELINE_STATE_DESC pso_desc = {};
+                pso_desc.pRootSignature = fragment_shading_pass.root_signature;
+                pso_desc.CS.pShaderBytecode = compute_shader->GetBufferPointer();
+                pso_desc.CS.BytecodeLength = compute_shader->GetBufferSize();
+                pso_desc.NodeMask = 0;
+                pso_desc.CachedPSO = {};
+                pso_desc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
+                device->CreateComputePipelineState(&pso_desc, IID_PPV_ARGS(&fragment_shading_pass.compute_pso));
+            }
+            compute_shader->Release();
+        }
+    }
+
+    void Exit_Rasterization () {
+
+        fragment_buffer->Release();
+        cbv_srv_uav_heap->Release();
+
+        // Rasterizer Pass
+        {
+            rasterizer_pass.compute_pso->Release();
+            rasterizer_pass.root_signature->Release();
+        }
+
+        // Fragment Shading Pass
+        {
+            fragment_shading_pass.compute_pso->Release();
+            fragment_shading_pass.root_signature->Release();
+        }
+
+    }
 
     void WaitForQueue(ID3D12CommandQueue * queue) {
         if(nullptr != queue) {
@@ -152,9 +384,9 @@ private:
     }
 };
 
-static auto _ = Demo_Register("Texturing", [] { return new Demo_002_Texturing(); });
+static auto _ = Demo_Register("Compute Rasterizer", [] { return new Demo_003_RasterizerCompute(); });
 
-bool Demo_002_Texturing::DoInitResources() {
+bool Demo_003_RasterizerCompute::DoInitResources() {
     bool vsync_on = false;
 
     // Create Swapchain 
@@ -206,6 +438,7 @@ bool Demo_002_Texturing::DoInitResources() {
 
         device->CreateDescriptorHeap(&heap_desc, IID_PPV_ARGS(&rtv_heap));
     }
+    
     // Create RTVs into Heap
     D3D12_CPU_DESCRIPTOR_HANDLE current_rtv_handle = rtv_heap->GetCPUDescriptorHandleForHeapStart();
     rtv_handle_increment_size = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
@@ -214,203 +447,28 @@ bool Demo_002_Texturing::DoInitResources() {
         device->CreateRenderTargetView(swap_chain_render_targets[n], nullptr, current_rtv_handle);
         current_rtv_handle.ptr = SIZE_T(current_rtv_handle.ptr + INT64(rtv_handle_increment_size));
     }
-    
-    // Create SRV/UAV/CBV Heap
-    {
-        constexpr uint32_t Max_CBV_SRV_UAV = 16;
-        D3D12_DESCRIPTOR_HEAP_DESC heap_desc = {};
-        heap_desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-        heap_desc.NumDescriptors = Max_CBV_SRV_UAV;
-        heap_desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
-        heap_desc.NodeMask = 0;
 
-        device->CreateDescriptorHeap(&heap_desc, IID_PPV_ARGS(&cbv_srv_uav_heap));
-    }
-
-    // Load Image via STB into Memory and Then into a D3D12Resource
-    {
-        // Load PNG from File
-        int img_w, img_h, image_c;
-        stbi_uc* image_data = stbi_load("../assets/directx.png", &img_w, &img_h, &image_c, STBI_rgb_alpha);
-        size_t bytes_per_pixel = 4;
-        size_t bytes_per_row = img_w * bytes_per_pixel;
-        size_t image_bytes = bytes_per_row * img_h;
-        ASSERT(nullptr != image_data);
-        CONSUME_VAR(image_bytes);
-        
-        D3D12_HEAP_PROPERTIES   default_heap_props      = GetDefaultHeapProps(D3D12_HEAP_TYPE_DEFAULT);
-
-        D3D12_RESOURCE_DESC texture_resource_desc = {};
-        texture_resource_desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-        texture_resource_desc.Alignment = 0;
-        texture_resource_desc.Width = img_w;
-        texture_resource_desc.Height = img_h;
-        texture_resource_desc.DepthOrArraySize = 1;
-        texture_resource_desc.MipLevels = 1;
-        texture_resource_desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-        texture_resource_desc.SampleDesc.Count = 1;
-        texture_resource_desc.SampleDesc.Quality = 0;
-        texture_resource_desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
-        texture_resource_desc.Flags = D3D12_RESOURCE_FLAG_NONE;
-
-        res = device->CreateCommittedResource(&default_heap_props,
-            D3D12_HEAP_FLAG_NONE,
-            &texture_resource_desc,
-            D3D12_RESOURCE_STATE_COPY_DEST,
-            nullptr,
-            IID_PPV_ARGS(&my_texture_resource));
-        CHECK_AND_FAIL(res);
-        
-        // Aligned
-        uint32_t alignment = D3D12_TEXTURE_DATA_PITCH_ALIGNMENT;
-        uint64_t dest_row_size_in_bytes = (((uint64_t)bytes_per_row  + alignment - 1) / alignment) * alignment; ;
-        
-        uint64_t texture_upload_buffer_size = 0;// = (uint64_t)image_bytes;
-        uint32_t num_rows = 0;// = img_h;
-        uint64_t row_size_in_bytes = 0; // 
-        D3D12_PLACED_SUBRESOURCE_FOOTPRINT placed_subresource_foot_print = {};
-        device->GetCopyableFootprints(&texture_resource_desc, 0, 1, 0, &placed_subresource_foot_print, &num_rows, &row_size_in_bytes, &texture_upload_buffer_size);
-        
-        CONSUME_VAR(row_size_in_bytes);
-
-        ID3D12Resource * staging_buffer = nullptr;
-
-        // Staging
-        D3D12_HEAP_PROPERTIES   staging_heap_props      = GetDefaultHeapProps(D3D12_HEAP_TYPE_UPLOAD);
-        D3D12_RESOURCE_DESC     staging_resource_desc   = GetBufferResourceDesc(texture_upload_buffer_size);
-        res = device->CreateCommittedResource(&staging_heap_props,
-            D3D12_HEAP_FLAG_NONE,
-            &staging_resource_desc,
-            D3D12_RESOURCE_STATE_GENERIC_READ | D3D12_RESOURCE_STATE_COPY_SOURCE,
-            nullptr,
-            IID_PPV_ARGS(&staging_buffer));
-        CHECK_AND_FAIL(res);
-
-        D3D12_RANGE read_range = {}; read_range.Begin = 0; read_range.End = 0;
-        using Byte = uint8_t;
-        Byte * data_dst = nullptr;
-        res = staging_buffer->Map(0, &read_range, reinterpret_cast<void**>(&data_dst)); CHECK_AND_FAIL(res);
-        
-        for(uint32_t y = 0; y < num_rows; ++y) {
-            memcpy (data_dst + y * dest_row_size_in_bytes,
-                    image_data + y * bytes_per_row,
-                    row_size_in_bytes);
-        }
-        
-        staging_buffer->Unmap(0, nullptr); 
-
-        {
-            direct_cmd_list[0]->Reset(direct_cmd_allocator, nullptr);
-
-            D3D12_RESOURCE_BARRIER barrier = {};
-            barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-            barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
-
-            D3D12_TEXTURE_COPY_LOCATION dst = {};
-            dst.pResource = my_texture_resource;
-            dst.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
-            dst.SubresourceIndex = 0;
-
-            D3D12_TEXTURE_COPY_LOCATION src = {};
-            src.pResource = staging_buffer;
-            src.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
-            src.PlacedFootprint = placed_subresource_foot_print;
-
-            direct_cmd_list[0]->CopyTextureRegion(&dst, 0, 0, 0, &src, nullptr);
-
-            barrier.Transition.pResource = my_texture_resource;
-            barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
-            barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
-            direct_cmd_list[0]->ResourceBarrier(1, &barrier);
-            direct_cmd_list[0]->Close();
-            
-            ID3D12CommandList * execute_cmds[1] = { direct_cmd_list[0] };
-            direct_queue->ExecuteCommandLists(1, execute_cmds);
-
-            WaitForQueue(direct_queue);
-        }
-
-        staging_buffer->Release();
-        stbi_image_free(image_data);
-        
-
-        D3D12_CPU_DESCRIPTOR_HANDLE current_srv_handle = cbv_srv_uav_heap->GetCPUDescriptorHandleForHeapStart();
-        // Create SRV Handle for our Sample Texture
-        {
-            D3D12_SHADER_RESOURCE_VIEW_DESC srv_desc = {};
-            srv_desc.Format = texture_resource_desc.Format;
-            srv_desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-            srv_desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-            srv_desc.Texture2D.MipLevels = 1;
-            device->CreateShaderResourceView(my_texture_resource, &srv_desc, current_srv_handle);
-        }
-    }
-
-    IDxcBlob * vertex_shader = Demo::CompileShaderFromFile(L"../code/src/shaders/demo002/simple_mesh.vert.hlsl", L"VSMain", L"vs_6_0");
-    IDxcBlob * pixel_shader = Demo::CompileShaderFromFile(L"../code/src/shaders/demo002/simple_mesh.frag.hlsl", L"PSMain", L"ps_6_0");
+    IDxcBlob * vertex_shader = Demo::CompileShaderFromFile(L"../code/src/shaders/demo003/simple_mesh.vert.hlsl", L"VSMain", L"vs_6_0");
+    IDxcBlob * pixel_shader = Demo::CompileShaderFromFile(L"../code/src/shaders/demo003/simple_mesh.frag.hlsl", L"PSMain", L"ps_6_0");
     ASSERT(nullptr != vertex_shader);
     ASSERT(nullptr != pixel_shader);
-    
-    // Create Root Signature
-    {
-        D3D12_DESCRIPTOR_RANGE1 srv_descriptor_range = {};
-        srv_descriptor_range.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
-        srv_descriptor_range.NumDescriptors = 1;
-        // : register(t0, space2)
-        srv_descriptor_range.BaseShaderRegister = 0;
-        srv_descriptor_range.RegisterSpace = 2;
-        srv_descriptor_range.Flags = D3D12_DESCRIPTOR_RANGE_FLAG_NONE;
-        srv_descriptor_range.OffsetInDescriptorsFromTableStart = 0;
 
-        constexpr uint32_t NumParameters = 1;
-        D3D12_ROOT_PARAMETER1 parameters[NumParameters] = {};
-        parameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-        parameters[0].DescriptorTable.NumDescriptorRanges = 1;
-        parameters[0].DescriptorTable.pDescriptorRanges = &srv_descriptor_range;
-
-        constexpr uint32_t NumStaticSamplers = 1;
-        D3D12_STATIC_SAMPLER_DESC static_samplers[NumStaticSamplers] = {};
-        static_samplers[0].Filter = D3D12_FILTER_COMPARISON_MIN_MAG_MIP_LINEAR;
-        static_samplers[0].AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
-        static_samplers[0].AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
-        static_samplers[0].AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
-        static_samplers[0].MipLODBias = 0;
-        static_samplers[0].MaxAnisotropy = 16;
-        static_samplers[0].ComparisonFunc = D3D12_COMPARISON_FUNC_ALWAYS; // ?
-        static_samplers[0].BorderColor = D3D12_STATIC_BORDER_COLOR_TRANSPARENT_BLACK;
-        static_samplers[0].MinLOD = 0.0f;
-        static_samplers[0].MaxLOD = 1.0f;
-        // : register(s0, space0)
-        static_samplers[0].ShaderRegister = 0; // s0
-        static_samplers[0].RegisterSpace = 0; // space 0
-        static_samplers[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL; 
-
-        ID3DBlob * rs_blob = nullptr;
-        ID3DBlob * rs_error_blob = nullptr;
-        D3D12_VERSIONED_ROOT_SIGNATURE_DESC root_signature_desc = {};
-        root_signature_desc.Version = D3D_ROOT_SIGNATURE_VERSION_1_1;
-        root_signature_desc.Desc_1_1 = {};
-        root_signature_desc.Desc_1_1.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
-        root_signature_desc.Desc_1_1.NumStaticSamplers = NumStaticSamplers;
-        root_signature_desc.Desc_1_1.pStaticSamplers = static_samplers;
-        
-        root_signature_desc.Desc_1_1.NumParameters = NumParameters;
-        root_signature_desc.Desc_1_1.pParameters = parameters;
-        
-        res = D3D12SerializeVersionedRootSignature(&root_signature_desc, &rs_blob, &rs_error_blob);
-        CHECK_AND_FAIL(res);
-        if(nullptr != rs_error_blob) {
-            ASSERT(nullptr != rs_error_blob);
-            rs_error_blob->Release();
-        }
-
-        res = device->CreateRootSignature(0, rs_blob->GetBufferPointer(), rs_blob->GetBufferSize(), IID_PPV_ARGS(&root_signature));
-        CHECK_AND_FAIL(res);
-
-        rs_blob->Release();
+    ID3DBlob * rs_blob = nullptr;
+    ID3DBlob * rs_error_blob = nullptr;
+    D3D12_VERSIONED_ROOT_SIGNATURE_DESC root_signature_desc = {};
+    root_signature_desc.Version = D3D_ROOT_SIGNATURE_VERSION_1_1;
+    root_signature_desc.Desc_1_1 = {};
+    root_signature_desc.Desc_1_1.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
+    res = D3D12SerializeVersionedRootSignature(&root_signature_desc, &rs_blob, &rs_error_blob);
+    CHECK_AND_FAIL(res);
+    if(nullptr != rs_error_blob) {
+        ASSERT(nullptr != rs_error_blob);
+        rs_error_blob->Release();
     }
 
-    // Create PSO
+    res = device->CreateRootSignature(0, rs_blob->GetBufferPointer(), rs_blob->GetBufferSize(), IID_PPV_ARGS(&root_signature));
+    CHECK_AND_FAIL(res);
+
     {
         constexpr uint32_t VertexInputElemCount = 3;
         D3D12_INPUT_ELEMENT_DESC vertex_layout[VertexInputElemCount] = {};
@@ -489,10 +547,12 @@ bool Demo_002_Texturing::DoInitResources() {
         res = device->CreateGraphicsPipelineState(&pso_desc, IID_PPV_ARGS(&graphics_pso)); CHECK_AND_FAIL(res);
     }
 
+    rs_blob->Release();
+
     vertex_shader->Release();
     pixel_shader->Release();
 
-    GetQuadMesh(&mesh);
+    GetTriangleMesh(&mesh);
     
     vertex_buffer_bytes = sizeof(Vertex) * mesh.vertices.size();
     index_buffer_bytes = sizeof(IndexType) * mesh.indices.size();
@@ -627,28 +687,29 @@ bool Demo_002_Texturing::DoInitResources() {
         staging_index_buffer->Release();
     }
 
+    Init_Rasterization();
+
     Demo::InitUI(FrameQueueLength, DXGI_FORMAT_R8G8B8A8_UNORM);
 
     return true;
 }
 
-bool Demo_002_Texturing::DoExitResources() { 
+bool Demo_003_RasterizerCompute::DoExitResources() { 
     WaitForQueue(direct_queue);
     
     Demo::ExitUI();
 
+    Exit_Rasterization();
+
     root_signature->Release();
     graphics_pso->Release();
 
-    my_texture_resource->Release();
     vertex_buffer->Release();
     index_buffer->Release();
 
     for(uint32_t n = 0; n < FrameQueueLength; ++n) {
         swap_chain_render_targets[n]->Release();
     }
-
-    cbv_srv_uav_heap->Release();
 
     rtv_heap->Release();
     
@@ -668,7 +729,7 @@ bool Demo_002_Texturing::DoExitResources() {
     return true;
 }
 
-void Demo_002_Texturing::OnUI() {
+void Demo_003_RasterizerCompute::OnUI() {
     // Start the Dear ImGui frame
     ImGui_ImplDX12_NewFrame();
     ImGui_ImplSDL2_NewFrame(render_window.sdl_wnd);
@@ -679,13 +740,14 @@ void Demo_002_Texturing::OnUI() {
     ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
     // 1. Show the big demo window (Most of the sample code is in ImGui::ShowDemoWindow()! You can browse its code to learn more about Dear ImGui!).
-    // ImGui::ShowDemoWindow(&show_demo_window);
+    ImGui::ShowDemoWindow(&show_demo_window);
+
 }
 
-void Demo_002_Texturing::OnUpdate() {
+void Demo_003_RasterizerCompute::OnUpdate() {
 }
 
-void Demo_002_Texturing::OnRender() {
+void Demo_003_RasterizerCompute::OnRender() {
 
     // Populate Command List
     ID3D12GraphicsCommandList * current_cmd_list = direct_cmd_list[frame_index];
@@ -743,11 +805,7 @@ void Demo_002_Texturing::OnRender() {
         ibv.BufferLocation = index_buffer->GetGPUVirtualAddress();
         ibv.Format = IndexBufferFormat;
         ibv.SizeInBytes = (uint32_t)index_buffer_bytes;
-        current_cmd_list->IASetIndexBuffer(&ibv);
-
-        // Set Descriptor Table 
-        current_cmd_list->SetDescriptorHeaps(1, &cbv_srv_uav_heap);
-        current_cmd_list->SetGraphicsRootDescriptorTable(0, cbv_srv_uav_heap->GetGPUDescriptorHandleForHeapStart());
+            current_cmd_list->IASetIndexBuffer(&ibv);
 
         // Set PSO
         current_cmd_list->SetPipelineState(graphics_pso);

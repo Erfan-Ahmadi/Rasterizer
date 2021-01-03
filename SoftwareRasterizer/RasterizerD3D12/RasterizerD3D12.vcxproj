@@ -34,6 +34,7 @@
     </ClCompile>
     <ClCompile Include="..\code\src\demos\demo_001_triangle.cpp" />
     <ClCompile Include="..\code\src\demos\demo_002_texturing.cpp" />
+    <ClCompile Include="..\code\src\demos\demo_003_compute_rasterizer.cpp" />
     <ClCompile Include="..\code\src\demo_framework.cpp" />
   </ItemGroup>
   <ItemGroup>
