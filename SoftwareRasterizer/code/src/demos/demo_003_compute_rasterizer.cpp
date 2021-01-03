@@ -274,7 +274,7 @@ private:
 
         // Fragment Shading Pass
         {
-            IDxcBlob * compute_shader = Demo::CompileShaderFromFile(L"../code/src/shaders/demo003/fragment_shader.comp.hlsl", L"main", L"cs_6_0");
+            IDxcBlob * compute_shader = Demo::CompileShaderFromFile(L"../code/src/shaders/demo003/fragment_shading.comp.hlsl", L"main", L"cs_6_0");
             ASSERT(nullptr != compute_shader);
 
             // Create Root Signature
