@@ -1035,6 +1035,35 @@ void Demo_003_RasterizerCompute::OnRender() {
         if(false == use_hardware_rasterization) {
             
             current_cmd_list->SetDescriptorHeaps(1, &cbv_srv_uav_heap);
+            
+            // Vertex Shading Pass
+            {
+                current_cmd_list->SetComputeRootSignature(vertex_shading_pass.root_signature);
+                current_cmd_list->SetPipelineState(vertex_shading_pass.compute_pso);
+                current_cmd_list->SetComputeRootDescriptorTable(0, vertex_shading_pass.descriptor_table_start[frame_index]);
+                constexpr uint32_t thread_group_size_x = 16;
+                constexpr uint32_t thread_group_size_y = 1;
+                constexpr uint32_t thread_group_size_z = 1;
+                uint32_t thread_group_count_x = (static_cast<uint32_t>(mesh.vertices.size()) / thread_group_size_x) + 1;
+                uint32_t thread_group_count_y = 1;
+                uint32_t thread_group_count_z = 1;
+                current_cmd_list->Dispatch(thread_group_count_x, thread_group_count_y, thread_group_count_z);
+            }
+            
+            // Rasterization
+            {
+                current_cmd_list->SetComputeRootSignature(rasterizer_pass.root_signature);
+                current_cmd_list->SetPipelineState(rasterizer_pass.compute_pso);
+                current_cmd_list->SetComputeRootDescriptorTable(0, rasterizer_pass.descriptor_table_start[frame_index]);
+                constexpr uint32_t thread_group_size_x = 16;
+                constexpr uint32_t thread_group_size_y = 1;
+                constexpr uint32_t thread_group_size_z = 1;
+                uint32_t triangle_count = static_cast<uint32_t>(mesh.indices.size() / 3);
+                uint32_t thread_group_count_x = (triangle_count / thread_group_size_x) + 1;
+                uint32_t thread_group_count_y = 1;
+                uint32_t thread_group_count_z = 1;
+                current_cmd_list->Dispatch(thread_group_count_x, thread_group_count_y, thread_group_count_z);
+            }
 
             // Fragment Shading Pass
             {
