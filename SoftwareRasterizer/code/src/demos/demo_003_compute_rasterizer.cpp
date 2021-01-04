@@ -15,42 +15,6 @@ protected:
     virtual AdapterPreference GetAdapterPreference() const override { return AdapterPreference::Hardware; };
 
 private:
-    void GetTriangleMesh(Mesh * out) {
-        if(nullptr != out) {
-            out->vertices = std::vector<Vertex>({
-                { { 0.0f,    0.4f,   0.0f }, {0.0f, 0.0f, 0.0f}, {uint8_t(255 * 0.8f), uint8_t(255 * 0.0f), uint8_t(255 * 0.6f), 255}, {0.0f, 0.0f} }, // MIDDLE_TOP
-                { { 0.25f,   -0.4f,  0.0f }, {0.0f, 0.0f, 0.0f}, {uint8_t(255 * 0.1f), uint8_t(255 * 0.6f), uint8_t(255 * 0.4f), 255}, {0.0f, 0.0f} }, // BOTTOM_RIGHT
-                { { -0.25f,  -0.4f,  0.0f }, {0.0f, 0.0f, 0.0f}, {uint8_t(255 * 0   ), uint8_t(255 * 0.5f), uint8_t(255 * 1.0f), 255}, {0.0f, 0.0f} }, // BOTTOM_LEFT
-            });
-        
-            out->indices = std::vector<IndexType>({
-                0, 1, 2,
-            });
-
-        } else {
-            ::printf("GetTriangleMesh: out is nullptr");
-        }
-    }
-    void GetQuadMesh(Mesh * out) {
-        if(nullptr != out) {
-            out->vertices = std::vector<Vertex>({
-                { { 0.25f,    0.4f,   0.0f }, {0.0f, 0.0f, 0.0f}, {uint8_t(255 * 0.5f),   uint8_t(255 * 0.3f),   uint8_t(255 * 0.6f), 255}, {1.0f, 0.0f} }, // TOP_RIGHT
-                { { -0.25f,   0.4f,   0.0f }, {0.0f, 0.0f, 0.0f}, {uint8_t(255 * 0.8f),   uint8_t(255 * 0.0f),   uint8_t(255 * 0.6f), 255}, {0.0f, 0.0f} }, // TOP_LEFT
-                { { 0.25f,   -0.4f,   0.0f }, {0.0f, 0.0f, 0.0f}, {uint8_t(255 * 0.1f),   uint8_t(255 * 0.6f),   uint8_t(255 * 0.4f), 255}, {1.0f, 1.0f} }, // BOTTOM_RIGHT
-                { { -0.25f,  -0.4f,   0.0f }, {0.0f, 0.0f, 0.0f}, {uint8_t(255 * 0  ),    uint8_t(255 * 0.5f),   uint8_t(255 * 1.0f), 255}, {0.0f, 1.0f} }, // BOTTOM_LEFT
-            });
-        
-            out->indices = std::vector<IndexType>({
-                1, 2, 3, // LowerLeft Triangle
-                0, 2, 1, // UpperRight Triangle
-            });
-
-        } else {
-            ::printf("GetQuadMesh: out is nullptr");
-        }
-    }
-
-private:
     static constexpr uint32_t FrameQueueLength = 2;
 
     // SwapChain and It's RenderTarget Resources
@@ -83,7 +47,7 @@ private:
     uint32_t frame_index = 0;
     
     // Rasterization Stuff
-    struct VertexShaderUniform {
+    struct VertexShadingUniform {
         DirectX::XMFLOAT4X4 model_mat;
         DirectX::XMFLOAT4X4 view_mat;
         DirectX::XMFLOAT4X4 proj_mat;
@@ -93,9 +57,11 @@ private:
     struct InputVertexAttributes {
         float       pos[3];
         float       normal[3];
-        uint8_t     col[3];
+        float       col[3];
         float       uv[2];
     };
+    static_assert(sizeof(InputVertexAttributes) == sizeof(Vertex));
+
 
     // Vertex Shader Output
     // Primitive Assembly Input
@@ -103,7 +69,7 @@ private:
         float       pos_ndc[3];
         float       pos_world[3];
         float       normal_world[3];
-        uint8_t     col[3];
+        float       col[3];
         float       uv[2];
     };
 
@@ -114,7 +80,7 @@ private:
         float       pos_ndc[3];
         float       pos_world[3];
         float       normal_world[3];
-        uint8_t     col[3];
+        float       col[3];
         float       uv[2];
     };
 
@@ -126,11 +92,19 @@ private:
     ID3D12Resource * mvp_buffer[FrameQueueLength] = {}; 
 
     ID3D12DescriptorHeap * cbv_srv_uav_heap = nullptr;
+    
+    struct
+    {
+        ID3D12PipelineState * compute_pso = nullptr;
+        ID3D12RootSignature * root_signature = nullptr;
+        D3D12_GPU_DESCRIPTOR_HANDLE descriptor_table_start[FrameQueueLength];
+    } vertex_shading_pass;
 
     struct
     {
         ID3D12PipelineState * compute_pso = nullptr;
         ID3D12RootSignature * root_signature = nullptr;
+        D3D12_GPU_DESCRIPTOR_HANDLE descriptor_table_start[FrameQueueLength];
     } rasterizer_pass;
     
     struct
@@ -153,7 +127,7 @@ private:
         {
             D3D12_DESCRIPTOR_HEAP_DESC descriptor_heap_desc = {};
             descriptor_heap_desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-            descriptor_heap_desc.NumDescriptors = 10;
+            descriptor_heap_desc.NumDescriptors = 30;
             descriptor_heap_desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
             descriptor_heap_desc.NodeMask = 0;
             device->CreateDescriptorHeap(&descriptor_heap_desc, IID_PPV_ARGS(&cbv_srv_uav_heap));
@@ -166,16 +140,18 @@ private:
         // Vertex Buffer (done already)
         // Index Buffer (done already)
 
+        uint32_t mvp_aligned_size = D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT; // TODO
         // MVP Buffer (for vertex_shading compute shader)
         {
-            D3D12_RESOURCE_DESC     resource_desc   = GetBufferResourceDesc(sizeof(VertexShaderUniform));
-            resource_desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+            D3D12_HEAP_PROPERTIES   upload_heap_props      = GetDefaultHeapProps(D3D12_HEAP_TYPE_UPLOAD);
+            D3D12_RESOURCE_DESC     resource_desc   = GetBufferResourceDesc(mvp_aligned_size);
+            // resource_desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
 
             for(uint32_t i = 0; i < FrameQueueLength; ++i) {
-                res = device->CreateCommittedResource(&default_heap_props,
+                res = device->CreateCommittedResource(&upload_heap_props,
                     D3D12_HEAP_FLAG_NONE,
                     &resource_desc,
-                    D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER,
+                    D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER | D3D12_RESOURCE_STATE_GENERIC_READ,
                     nullptr,
                     IID_PPV_ARGS(&mvp_buffer[i]));
                 CHECK_AND_FAIL(res);
@@ -241,28 +217,171 @@ private:
                 CHECK_AND_FAIL(res);
             }
         }
+        
+        // Vertex Shading Pass
+        {
+            IDxcBlob * compute_shader = Demo::CompileShaderFromFile(L"../code/src/shaders/demo003/rasterization/vertex_shading.comp.hlsl", L"main", L"cs_6_0");
+            ASSERT(nullptr != compute_shader);
+
+            // Create Root Signature
+            {
+                D3D12_DESCRIPTOR_RANGE1 descriptor_ranges[3] = {};
+                descriptor_ranges[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
+                descriptor_ranges[0].NumDescriptors = 1;
+                // : register(u0, space1)
+                descriptor_ranges[0].BaseShaderRegister = 0;
+                descriptor_ranges[0].RegisterSpace = 1;
+                descriptor_ranges[0].Flags = D3D12_DESCRIPTOR_RANGE_FLAG_NONE;
+                descriptor_ranges[0].OffsetInDescriptorsFromTableStart = 0;
+
+                descriptor_ranges[1].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+                descriptor_ranges[1].NumDescriptors = 1;
+                // : register(t0, space1)
+                descriptor_ranges[1].BaseShaderRegister = 0;
+                descriptor_ranges[1].RegisterSpace = 1;
+                descriptor_ranges[1].Flags = D3D12_DESCRIPTOR_RANGE_FLAG_NONE;
+                descriptor_ranges[1].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+                
+                descriptor_ranges[2].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
+                descriptor_ranges[2].NumDescriptors = 1;
+                // : register(b0, space1)
+                descriptor_ranges[2].BaseShaderRegister = 0;
+                descriptor_ranges[2].RegisterSpace = 1;
+                descriptor_ranges[2].Flags = D3D12_DESCRIPTOR_RANGE_FLAG_NONE;
+                descriptor_ranges[2].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+                constexpr uint32_t NumParameters = 2;
+                D3D12_ROOT_PARAMETER1 parameters[NumParameters] = {};
+                parameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+                parameters[0].DescriptorTable.NumDescriptorRanges = 3;
+                parameters[0].DescriptorTable.pDescriptorRanges = descriptor_ranges;
+
+                // : register(b1, space1)
+                parameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS; // vertex_count
+                parameters[1].Constants.ShaderRegister = 1;
+                parameters[1].Constants.RegisterSpace = 1;
+                parameters[1].Constants.Num32BitValues = 1;
+
+                ID3DBlob * rs_blob = nullptr;
+                ID3DBlob * rs_error_blob = nullptr;
+                D3D12_VERSIONED_ROOT_SIGNATURE_DESC root_signature_desc = {};
+                root_signature_desc.Version = D3D_ROOT_SIGNATURE_VERSION_1_1;
+                root_signature_desc.Desc_1_1 = {};
+                root_signature_desc.Desc_1_1.Flags = D3D12_ROOT_SIGNATURE_FLAG_NONE;
+                root_signature_desc.Desc_1_1.NumStaticSamplers = 0;
+                root_signature_desc.Desc_1_1.pStaticSamplers = nullptr;
+        
+                root_signature_desc.Desc_1_1.NumParameters = NumParameters;
+                root_signature_desc.Desc_1_1.pParameters = parameters;
+        
+                res = D3D12SerializeVersionedRootSignature(&root_signature_desc, &rs_blob, &rs_error_blob);
+                CHECK_AND_FAIL(res);
+                if(nullptr != rs_error_blob) {
+                    ASSERT(nullptr != rs_error_blob);
+                    rs_error_blob->Release();
+                }
+
+                res = device->CreateRootSignature(0, rs_blob->GetBufferPointer(), rs_blob->GetBufferSize(), IID_PPV_ARGS(&vertex_shading_pass.root_signature));
+                CHECK_AND_FAIL(res);
+
+                rs_blob->Release();
+            }
+            // Create PSO for Compute 
+            {
+                D3D12_COMPUTE_PIPELINE_STATE_DESC pso_desc = {};
+                pso_desc.pRootSignature = vertex_shading_pass.root_signature;
+                pso_desc.CS.pShaderBytecode = compute_shader->GetBufferPointer();
+                pso_desc.CS.BytecodeLength = compute_shader->GetBufferSize();
+                pso_desc.NodeMask = 0;
+                pso_desc.CachedPSO = {};
+                pso_desc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
+                device->CreateComputePipelineState(&pso_desc, IID_PPV_ARGS(&vertex_shading_pass.compute_pso));
+            }
+            compute_shader->Release();
+            
+            // Create UAV+SRV+CBV GPU Handles(OutputVertices+InputVertices+MVP Uniform)
+            {
+                for(uint32_t i = 0; i < FrameQueueLength; ++i) {
+
+                    vertex_shading_pass.descriptor_table_start[i] = current_gpu_handle;
+                    
+                    D3D12_UNORDERED_ACCESS_VIEW_DESC uav_desc = {}; 
+                    uav_desc.Format = DXGI_FORMAT_UNKNOWN;
+                    uav_desc.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
+                    uav_desc.Buffer.FirstElement = 0;
+                    uav_desc.Buffer.NumElements = static_cast<uint32_t>(mesh.vertices.size());
+                    uav_desc.Buffer.StructureByteStride = sizeof(OutputVertexAttributes);
+                    uav_desc.Buffer.CounterOffsetInBytes = 0;
+                    uav_desc.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_NONE;
+                    device->CreateUnorderedAccessView(transformed_vertices_buffer[i], nullptr, &uav_desc, current_cpu_handle);
+                    current_cpu_handle.ptr += device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+                    current_gpu_handle.ptr += device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+
+                    D3D12_SHADER_RESOURCE_VIEW_DESC srv_desc = {};
+                    srv_desc.Format = DXGI_FORMAT_UNKNOWN;
+                    srv_desc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
+                    srv_desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+                    srv_desc.Buffer.FirstElement = 0;
+                    srv_desc.Buffer.NumElements = static_cast<uint32_t>(mesh.vertices.size());
+                    srv_desc.Buffer.StructureByteStride = sizeof(InputVertexAttributes);
+                    srv_desc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
+                    device->CreateShaderResourceView(vertex_buffer, &srv_desc, current_cpu_handle);
+                    current_cpu_handle.ptr += device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+                    current_gpu_handle.ptr += device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+                    
+                    D3D12_CONSTANT_BUFFER_VIEW_DESC cbv_desc = {};
+                    cbv_desc.BufferLocation = mvp_buffer[i]->GetGPUVirtualAddress();
+                    cbv_desc.SizeInBytes = mvp_aligned_size;
+                    device->CreateConstantBufferView(&cbv_desc, current_cpu_handle);
+                    current_cpu_handle.ptr += device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+                    current_gpu_handle.ptr += device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+                }
+            }
+        }
 
         // Rasterizer Pass
         {
             IDxcBlob * compute_shader = Demo::CompileShaderFromFile(L"../code/src/shaders/demo003/rasterization/rasterizer.comp.hlsl", L"main", L"cs_6_0");
             ASSERT(nullptr != compute_shader);
-
+            
             // Create Root Signature
             {
-                D3D12_DESCRIPTOR_RANGE1 descriptor_range = {};
-                descriptor_range.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
-                descriptor_range.NumDescriptors = 1;
+                D3D12_DESCRIPTOR_RANGE1 descriptor_ranges[3] = {};
+                descriptor_ranges[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
+                descriptor_ranges[0].NumDescriptors = 1;
                 // : register(u0, space1)
-                descriptor_range.BaseShaderRegister = 0;
-                descriptor_range.RegisterSpace = 1;
-                descriptor_range.Flags = D3D12_DESCRIPTOR_RANGE_FLAG_NONE;
-                descriptor_range.OffsetInDescriptorsFromTableStart = 0;
+                descriptor_ranges[0].BaseShaderRegister = 0;
+                descriptor_ranges[0].RegisterSpace = 1;
+                descriptor_ranges[0].Flags = D3D12_DESCRIPTOR_RANGE_FLAG_NONE;
+                descriptor_ranges[0].OffsetInDescriptorsFromTableStart = 0;
 
-                constexpr uint32_t NumParameters = 1;
+                descriptor_ranges[1].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+                descriptor_ranges[1].NumDescriptors = 1;
+                // : register(t0, space1)
+                descriptor_ranges[1].BaseShaderRegister = 0;
+                descriptor_ranges[1].RegisterSpace = 1;
+                descriptor_ranges[1].Flags = D3D12_DESCRIPTOR_RANGE_FLAG_NONE;
+                descriptor_ranges[1].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+                
+                descriptor_ranges[2].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+                descriptor_ranges[2].NumDescriptors = 1;
+                // : register(t1, space1)
+                descriptor_ranges[2].BaseShaderRegister = 1;
+                descriptor_ranges[2].RegisterSpace = 1;
+                descriptor_ranges[2].Flags = D3D12_DESCRIPTOR_RANGE_FLAG_NONE;
+                descriptor_ranges[2].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+                constexpr uint32_t NumParameters = 2;
                 D3D12_ROOT_PARAMETER1 parameters[NumParameters] = {};
                 parameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-                parameters[0].DescriptorTable.NumDescriptorRanges = 1;
-                parameters[0].DescriptorTable.pDescriptorRanges = &descriptor_range;
+                parameters[0].DescriptorTable.NumDescriptorRanges = 3;
+                parameters[0].DescriptorTable.pDescriptorRanges = descriptor_ranges;
+                
+                // : register(b0, space1)
+                parameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS; // indices_count
+                parameters[1].Constants.ShaderRegister = 1;
+                parameters[1].Constants.RegisterSpace = 0;
+                parameters[1].Constants.Num32BitValues = 1;
 
                 ID3DBlob * rs_blob = nullptr;
                 ID3DBlob * rs_error_blob = nullptr;
@@ -300,6 +419,49 @@ private:
                 device->CreateComputePipelineState(&pso_desc, IID_PPV_ARGS(&rasterizer_pass.compute_pso));
             }
             compute_shader->Release();
+
+            // Create UAV+SRV+SRV (Fragments
+            {
+                for(uint32_t i = 0; i < FrameQueueLength; ++i) {
+
+                    rasterizer_pass.descriptor_table_start[i] = current_gpu_handle;
+                    
+                    D3D12_UNORDERED_ACCESS_VIEW_DESC uav_desc = {};
+                    uav_desc.Format = DXGI_FORMAT_UNKNOWN;
+                    uav_desc.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
+                    uav_desc.Buffer.FirstElement = 0;
+                    uav_desc.Buffer.NumElements = window_width * window_height;
+                    uav_desc.Buffer.StructureByteStride = sizeof(Fragment);
+                    uav_desc.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_NONE;
+                    device->CreateUnorderedAccessView(fragment_buffer[i], nullptr, &uav_desc, current_cpu_handle);
+                    current_cpu_handle.ptr += device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+                    current_gpu_handle.ptr += device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+                    
+                    D3D12_SHADER_RESOURCE_VIEW_DESC srv_desc = {};
+                    srv_desc.Format = DXGI_FORMAT_UNKNOWN;
+                    srv_desc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
+                    srv_desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+                    srv_desc.Buffer.FirstElement = 0;
+                    srv_desc.Buffer.NumElements = static_cast<uint32_t>(mesh.vertices.size());
+                    srv_desc.Buffer.StructureByteStride = sizeof(OutputVertexAttributes);
+                    srv_desc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
+                    device->CreateShaderResourceView(transformed_vertices_buffer[i], &srv_desc, current_cpu_handle);
+                    current_cpu_handle.ptr += device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+                    current_gpu_handle.ptr += device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+
+                    srv_desc = {};
+                    srv_desc.Format = DXGI_FORMAT_UNKNOWN;
+                    srv_desc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
+                    srv_desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+                    srv_desc.Buffer.FirstElement = 0;
+                    srv_desc.Buffer.NumElements = static_cast<uint32_t>(mesh.indices.size());
+                    srv_desc.Buffer.StructureByteStride = sizeof(IndexType);
+                    srv_desc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
+                    device->CreateShaderResourceView(index_buffer, &srv_desc, current_cpu_handle);
+                    current_cpu_handle.ptr += device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+                    current_gpu_handle.ptr += device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+                }
+            }
         }
 
         // Fragment Shading Pass
@@ -369,7 +531,7 @@ private:
             }
             compute_shader->Release();
             
-            // Create SRV+UAV(Fragments+Framebuffer)
+            // Create UAV+SRV(Framebuffer+Fragments)
             {
                 for(uint32_t i = 0; i < FrameQueueLength; ++i) {
 
@@ -420,6 +582,12 @@ private:
         {
             fragment_shading_pass.compute_pso->Release();
             fragment_shading_pass.root_signature->Release();
+        }
+
+        // Fragment Shading Pass
+        {
+            vertex_shading_pass.compute_pso->Release();
+            vertex_shading_pass.root_signature->Release();
         }
     }
 
@@ -590,7 +758,7 @@ bool Demo_003_RasterizerCompute::DoInitResources() {
         //
         vertex_layout[2].SemanticName = "COLOR";
         vertex_layout[2].SemanticIndex = 0;
-        vertex_layout[2].Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        vertex_layout[2].Format = DXGI_FORMAT_R32G32B32_FLOAT;
         vertex_layout[2].InputSlot = 0;
         vertex_layout[2].AlignedByteOffset = offsetof(Vertex, col);
         vertex_layout[2].InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;

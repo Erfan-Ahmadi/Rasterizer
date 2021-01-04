@@ -19,42 +19,6 @@ protected:
     virtual AdapterPreference GetAdapterPreference() const override { return AdapterPreference::Hardware; };
 
 private:
-    void GetTriangleMesh(Mesh * out) {
-        if(nullptr != out) {
-            out->vertices = std::vector<Vertex>({
-                { { 0.0f,    0.4f,   0.0f }, {0.0f, 0.0f, 0.0f}, {uint8_t(255 * 0.8f), uint8_t(255 * 0.0f), uint8_t(255 * 0.6f), 255}, {0.0f, 0.0f} }, // MIDDLE_TOP
-                { { 0.25f,   -0.4f,  0.0f }, {0.0f, 0.0f, 0.0f}, {uint8_t(255 * 0.1f), uint8_t(255 * 0.6f), uint8_t(255 * 0.4f), 255}, {0.0f, 0.0f} }, // BOTTOM_RIGHT
-                { { -0.25f,  -0.4f,  0.0f }, {0.0f, 0.0f, 0.0f}, {uint8_t(255 * 0   ), uint8_t(255 * 0.5f), uint8_t(255 * 1.0f), 255}, {0.0f, 0.0f} }, // BOTTOM_LEFT
-            });
-        
-            out->indices = std::vector<IndexType>({
-                0, 1, 2,
-            });
-
-        } else {
-            ::printf("GetTriangleMesh: out is nullptr");
-        }
-    }
-    void GetQuadMesh(Mesh * out) {
-        if(nullptr != out) {
-            out->vertices = std::vector<Vertex>({
-                { { 0.25f,    0.4f,   0.0f }, {0.0f, 0.0f, 0.0f}, {uint8_t(255 * 0.5f),   uint8_t(255 * 0.3f),   uint8_t(255 * 0.6f), 255}, {1.0f, 0.0f} }, // TOP_RIGHT
-                { { -0.25f,   0.4f,   0.0f }, {0.0f, 0.0f, 0.0f}, {uint8_t(255 * 0.8f),   uint8_t(255 * 0.0f),   uint8_t(255 * 0.6f), 255}, {0.0f, 0.0f} }, // TOP_LEFT
-                { { 0.25f,   -0.4f,   0.0f }, {0.0f, 0.0f, 0.0f}, {uint8_t(255 * 0.1f),   uint8_t(255 * 0.6f),   uint8_t(255 * 0.4f), 255}, {1.0f, 1.0f} }, // BOTTOM_RIGHT
-                { { -0.25f,  -0.4f,   0.0f }, {0.0f, 0.0f, 0.0f}, {uint8_t(255 * 0  ),    uint8_t(255 * 0.5f),   uint8_t(255 * 1.0f), 255}, {0.0f, 1.0f} }, // BOTTOM_LEFT
-            });
-        
-            out->indices = std::vector<IndexType>({
-                1, 2, 3, // LowerLeft Triangle
-                0, 2, 1, // UpperRight Triangle
-            });
-
-        } else {
-            ::printf("GetQuadMesh: out is nullptr");
-        }
-    }
-
-private:
     static constexpr uint32_t FrameQueueLength = 2;
 
     // SwapChain and It's RenderTarget Resources
@@ -432,7 +396,7 @@ bool Demo_002_Texturing::DoInitResources() {
         //
         vertex_layout[2].SemanticName = "COLOR";
         vertex_layout[2].SemanticIndex = 0;
-        vertex_layout[2].Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        vertex_layout[2].Format = DXGI_FORMAT_R32G32B32_FLOAT;
         vertex_layout[2].InputSlot = 0;
         vertex_layout[2].AlignedByteOffset = offsetof(Vertex, col);
         vertex_layout[2].InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;

@@ -11,10 +11,8 @@ struct OutputVertexAttribs {
 StructuredBuffer<OutputVertexAttribs> vertices : register(t0, space1);
 StructuredBuffer<int> indices : register(t1, space1);
 
-cbuffer vertices_info : register(b1, space1) {
-    uint vertices_count;
+cbuffer vertices_info : register(b0, space1) {
     uint indices_count;
-    uint triangle_count;
 };
 
 // Output
@@ -41,11 +39,11 @@ struct CS_SystemValues {
 [numthreads( 16, 1, 1 )]
 void main(CS_SystemValues cs) {
     int index = cs.DTid.x;
-    if(3 * index + 2 < vertices_count) {
+    if(3 * index + 2 < indices_count) {
         int index = cs.DTid.x;
-        OutputVertexAttribs v0 = vertices[3 * index];
-        OutputVertexAttribs v1 = vertices[3 * index + 1];
-        OutputVertexAttribs v2 = vertices[3 * index + 2];
+        OutputVertexAttribs v0 = vertices[indices[3 * index + 0]];
+        OutputVertexAttribs v1 = vertices[indices[3 * index + 1]];
+        OutputVertexAttribs v2 = vertices[indices[3 * index + 2]];
 
         // Calculate AABB and Rasterize and write to Fragments via Atomic Functions.
     }

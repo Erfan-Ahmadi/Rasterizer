@@ -115,7 +115,7 @@ runtimeobject.lib
 struct Vertex {
     float       pos[3];
     float       normal[3];
-    uint8_t     col[4];
+    float       col[3];
     float       uv[2];
 };
 
@@ -156,4 +156,40 @@ inline D3D12_RESOURCE_DESC GetBufferResourceDesc(
     ret.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
     ret.Flags = flags;
     return ret;
+}
+
+inline void GetTriangleMesh(Mesh * out) {
+    if(nullptr != out) {
+        out->vertices = std::vector<Vertex>({
+            { { 0.0f,    0.4f,   0.0f }, {0.0f, 0.0f, 0.0f}, {0.8f, 0.0f, 0.6f}, {0.0f, 0.0f} }, // MIDDLE_TOP
+            { { 0.25f,   -0.4f,  0.0f }, {0.0f, 0.0f, 0.0f}, {0.1f, 0.6f, 0.4f}, {0.0f, 0.0f} }, // BOTTOM_RIGHT
+            { { -0.25f,  -0.4f,  0.0f }, {0.0f, 0.0f, 0.0f}, {0   , 0.5f, 1.0f}, {0.0f, 0.0f} }, // BOTTOM_LEFT
+        });
+        
+        out->indices = std::vector<IndexType>({
+            0, 1, 2,
+        });
+
+    } else {
+        ::printf("GetTriangleMesh: out is nullptr");
+    }
+}
+
+inline void GetQuadMesh(Mesh * out) {
+    if(nullptr != out) {
+        out->vertices = std::vector<Vertex>({
+            { { 0.25f,    0.4f,   0.0f }, {0.0f, 0.0f, 0.0f}, {0.5f,   0.3f,   0.6f}, {1.0f, 0.0f} }, // TOP_RIGHT
+            { { -0.25f,   0.4f,   0.0f }, {0.0f, 0.0f, 0.0f}, {0.8f,   0.0f,   0.6f}, {0.0f, 0.0f} }, // TOP_LEFT
+            { { 0.25f,   -0.4f,   0.0f }, {0.0f, 0.0f, 0.0f}, {0.1f,   0.6f,   0.4f}, {1.0f, 1.0f} }, // BOTTOM_RIGHT
+            { { -0.25f,  -0.4f,   0.0f }, {0.0f, 0.0f, 0.0f}, {0   ,   0.5f,   1.0f}, {0.0f, 1.0f} }, // BOTTOM_LEFT
+        });
+        
+        out->indices = std::vector<IndexType>({
+            1, 2, 3, // LowerLeft Triangle
+            0, 2, 1, // UpperRight Triangle
+        });
+
+    } else {
+        ::printf("GetQuadMesh: out is nullptr");
+    }
 }
