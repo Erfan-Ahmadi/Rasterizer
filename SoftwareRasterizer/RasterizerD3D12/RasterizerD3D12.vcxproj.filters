@@ -12,12 +12,6 @@
     <Filter Include="Source Files\demos">
       <UniqueIdentifier>{ec68d84a-7d77-4864-a173-a97421de4269}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Source Files\shaders">
-      <UniqueIdentifier>{c3bb385f-18b8-4d48-9c8c-01c9c71bc8cf}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Source Files\shaders\demo_001">
-      <UniqueIdentifier>{e75a7d06-180f-4cfa-9a10-bc1d320bfa01}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Source Files\imgui">
       <UniqueIdentifier>{2808f9aa-2fcb-4b69-9f74-bd69710b9881}</UniqueIdentifier>
     </Filter>

@@ -22,9 +22,9 @@ private:
     void GetTriangleMesh(Mesh * out) {
         if(nullptr != out) {
             out->vertices = std::vector<Vertex>({
-                { { 0.0f,    0.4f,   0.0f }, {uint8_t(255 * 0.8f), uint8_t(255 * 0.0f), uint8_t(255 * 0.6f), 255}, {0.0f, 0.0f} }, // MIDDLE_TOP
-                { { 0.25f,   -0.4f,  0.0f }, {uint8_t(255 * 0.1f), uint8_t(255 * 0.6f), uint8_t(255 * 0.4f), 255}, {0.0f, 0.0f} }, // BOTTOM_RIGHT
-                { { -0.25f,  -0.4f,  0.0f }, {uint8_t(255 * 0   ), uint8_t(255 * 0.5f), uint8_t(255 * 1.0f), 255}, {0.0f, 0.0f} }, // BOTTOM_LEFT
+                { { 0.0f,    0.4f,   0.0f }, {0.0f, 0.0f, 0.0f}, {uint8_t(255 * 0.8f), uint8_t(255 * 0.0f), uint8_t(255 * 0.6f), 255}, {0.0f, 0.0f} }, // MIDDLE_TOP
+                { { 0.25f,   -0.4f,  0.0f }, {0.0f, 0.0f, 0.0f}, {uint8_t(255 * 0.1f), uint8_t(255 * 0.6f), uint8_t(255 * 0.4f), 255}, {0.0f, 0.0f} }, // BOTTOM_RIGHT
+                { { -0.25f,  -0.4f,  0.0f }, {0.0f, 0.0f, 0.0f}, {uint8_t(255 * 0   ), uint8_t(255 * 0.5f), uint8_t(255 * 1.0f), 255}, {0.0f, 0.0f} }, // BOTTOM_LEFT
             });
         
             out->indices = std::vector<IndexType>({
@@ -38,10 +38,10 @@ private:
     void GetQuadMesh(Mesh * out) {
         if(nullptr != out) {
             out->vertices = std::vector<Vertex>({
-                { { 0.25f,    0.4f,   0.0f }, {uint8_t(255 * 0.5f),   uint8_t(255 * 0.3f),   uint8_t(255 * 0.6f), 255}, {1.0f, 0.0f} }, // TOP_RIGHT
-                { { -0.25f,   0.4f,   0.0f }, {uint8_t(255 * 0.8f),   uint8_t(255 * 0.0f),   uint8_t(255 * 0.6f), 255}, {0.0f, 0.0f} }, // TOP_LEFT
-                { { 0.25f,   -0.4f,  0.0f },  {uint8_t(255 * 0.1f),   uint8_t(255 * 0.6f),   uint8_t(255 * 0.4f), 255}, {1.0f, 1.0f} }, // BOTTOM_RIGHT
-                { { -0.25f,  -0.4f,  0.0f },  {uint8_t(255 * 0  ),    uint8_t(255 * 0.5f),   uint8_t(255 * 1.0f), 255}, {0.0f, 1.0f} }, // BOTTOM_LEFT
+                { { 0.25f,    0.4f,   0.0f }, {0.0f, 0.0f, 0.0f}, {uint8_t(255 * 0.5f),   uint8_t(255 * 0.3f),   uint8_t(255 * 0.6f), 255}, {1.0f, 0.0f} }, // TOP_RIGHT
+                { { -0.25f,   0.4f,   0.0f }, {0.0f, 0.0f, 0.0f}, {uint8_t(255 * 0.8f),   uint8_t(255 * 0.0f),   uint8_t(255 * 0.6f), 255}, {0.0f, 0.0f} }, // TOP_LEFT
+                { { 0.25f,   -0.4f,   0.0f }, {0.0f, 0.0f, 0.0f}, {uint8_t(255 * 0.1f),   uint8_t(255 * 0.6f),   uint8_t(255 * 0.4f), 255}, {1.0f, 1.0f} }, // BOTTOM_RIGHT
+                { { -0.25f,  -0.4f,   0.0f }, {0.0f, 0.0f, 0.0f}, {uint8_t(255 * 0  ),    uint8_t(255 * 0.5f),   uint8_t(255 * 1.0f), 255}, {0.0f, 1.0f} }, // BOTTOM_LEFT
             });
         
             out->indices = std::vector<IndexType>({
@@ -412,7 +412,7 @@ bool Demo_002_Texturing::DoInitResources() {
 
     // Create PSO
     {
-        constexpr uint32_t VertexInputElemCount = 3;
+        constexpr uint32_t VertexInputElemCount = 4;
         D3D12_INPUT_ELEMENT_DESC vertex_layout[VertexInputElemCount] = {};
         vertex_layout[0].SemanticName = "POSITION";
         vertex_layout[0].SemanticIndex = 0;
@@ -422,21 +422,29 @@ bool Demo_002_Texturing::DoInitResources() {
         vertex_layout[0].InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
         vertex_layout[0].InstanceDataStepRate = 0;
         //
-        vertex_layout[1].SemanticName = "COLOR";
+        vertex_layout[1].SemanticName = "NORMAL";
         vertex_layout[1].SemanticIndex = 0;
-        vertex_layout[1].Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        vertex_layout[1].Format = DXGI_FORMAT_R32G32B32_FLOAT;
         vertex_layout[1].InputSlot = 0;
-        vertex_layout[1].AlignedByteOffset = offsetof(Vertex, col);
+        vertex_layout[1].AlignedByteOffset = offsetof(Vertex, normal);
         vertex_layout[1].InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
         vertex_layout[1].InstanceDataStepRate = 0;
         //
-        vertex_layout[2].SemanticName = "TEXCOORD";
+        vertex_layout[2].SemanticName = "COLOR";
         vertex_layout[2].SemanticIndex = 0;
-        vertex_layout[2].Format = DXGI_FORMAT_R32G32_FLOAT;
+        vertex_layout[2].Format = DXGI_FORMAT_R8G8B8A8_UNORM;
         vertex_layout[2].InputSlot = 0;
-        vertex_layout[2].AlignedByteOffset = offsetof(Vertex, uv);
+        vertex_layout[2].AlignedByteOffset = offsetof(Vertex, col);
         vertex_layout[2].InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
         vertex_layout[2].InstanceDataStepRate = 0;
+        //
+        vertex_layout[3].SemanticName = "TEXCOORD";
+        vertex_layout[3].SemanticIndex = 0;
+        vertex_layout[3].Format = DXGI_FORMAT_R32G32_FLOAT;
+        vertex_layout[3].InputSlot = 0;
+        vertex_layout[3].AlignedByteOffset = offsetof(Vertex, uv);
+        vertex_layout[3].InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
+        vertex_layout[3].InstanceDataStepRate = 0;
 
         D3D12_GRAPHICS_PIPELINE_STATE_DESC pso_desc = {};
         pso_desc.pRootSignature = root_signature;

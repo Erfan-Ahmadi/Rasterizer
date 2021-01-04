@@ -18,9 +18,9 @@ private:
     void GetTriangleMesh(Mesh * out) {
         if(nullptr != out) {
             out->vertices = std::vector<Vertex>({
-                { { 0.0f,    0.4f,   0.0f }, {uint8_t(255 * 0.8f), uint8_t(255 * 0.0f), uint8_t(255 * 0.6f), 255}, {0.0f, 0.0f} }, // MIDDLE_TOP
-                { { 0.25f,   -0.4f,  0.0f }, {uint8_t(255 * 0.1f), uint8_t(255 * 0.6f), uint8_t(255 * 0.4f), 255}, {0.0f, 0.0f} }, // BOTTOM_RIGHT
-                { { -0.25f,  -0.4f,  0.0f }, {uint8_t(255 * 0   ), uint8_t(255 * 0.5f), uint8_t(255 * 1.0f), 255}, {0.0f, 0.0f} }, // BOTTOM_LEFT
+                { { 0.0f,    0.4f,   0.0f }, {0.0f, 0.0f, 0.0f}, {uint8_t(255 * 0.8f), uint8_t(255 * 0.0f), uint8_t(255 * 0.6f), 255}, {0.0f, 0.0f} }, // MIDDLE_TOP
+                { { 0.25f,   -0.4f,  0.0f }, {0.0f, 0.0f, 0.0f}, {uint8_t(255 * 0.1f), uint8_t(255 * 0.6f), uint8_t(255 * 0.4f), 255}, {0.0f, 0.0f} }, // BOTTOM_RIGHT
+                { { -0.25f,  -0.4f,  0.0f }, {0.0f, 0.0f, 0.0f}, {uint8_t(255 * 0   ), uint8_t(255 * 0.5f), uint8_t(255 * 1.0f), 255}, {0.0f, 0.0f} }, // BOTTOM_LEFT
             });
         
             out->indices = std::vector<IndexType>({
@@ -34,10 +34,10 @@ private:
     void GetQuadMesh(Mesh * out) {
         if(nullptr != out) {
             out->vertices = std::vector<Vertex>({
-                { { 0.25f,    0.4f,   0.0f }, {uint8_t(255 * 0.5f),   uint8_t(255 * 0.3f),   uint8_t(255 * 0.6f), 255}, {0.0f, 0.0f} }, // TOP_RIGHT
-                { { -0.25f,   0.4f,   0.0f }, {uint8_t(255 * 0.8f),   uint8_t(255 * 0.0f),   uint8_t(255 * 0.6f), 255}, {0.0f, 0.0f} }, // TOP_LEFT
-                { { 0.25f,   -0.4f,  0.0f },  {uint8_t(255 * 0.1f),   uint8_t(255 * 0.6f),   uint8_t(255 * 0.4f), 255}, {0.0f, 0.0f} }, // BOTTOM_RIGHT
-                { { -0.25f,  -0.4f,  0.0f },  {uint8_t(255 * 0  ),    uint8_t(255 * 0.5f),   uint8_t(255 * 1.0f), 255}, {0.0f, 0.0f} }, // BOTTOM_LEFT
+                { { 0.25f,    0.4f,   0.0f }, {0.0f, 0.0f, 0.0f}, {uint8_t(255 * 0.5f),   uint8_t(255 * 0.3f),   uint8_t(255 * 0.6f), 255}, {1.0f, 0.0f} }, // TOP_RIGHT
+                { { -0.25f,   0.4f,   0.0f }, {0.0f, 0.0f, 0.0f}, {uint8_t(255 * 0.8f),   uint8_t(255 * 0.0f),   uint8_t(255 * 0.6f), 255}, {0.0f, 0.0f} }, // TOP_LEFT
+                { { 0.25f,   -0.4f,   0.0f }, {0.0f, 0.0f, 0.0f}, {uint8_t(255 * 0.1f),   uint8_t(255 * 0.6f),   uint8_t(255 * 0.4f), 255}, {1.0f, 1.0f} }, // BOTTOM_RIGHT
+                { { -0.25f,  -0.4f,   0.0f }, {0.0f, 0.0f, 0.0f}, {uint8_t(255 * 0  ),    uint8_t(255 * 0.5f),   uint8_t(255 * 1.0f), 255}, {0.0f, 1.0f} }, // BOTTOM_LEFT
             });
         
             out->indices = std::vector<IndexType>({
@@ -83,21 +83,16 @@ private:
     uint32_t frame_index = 0;
     
     // Rasterization Stuff
-    
-    struct ModelUniform {
-        DirectX::XMFLOAT4X4 model_mat;
-        DirectX::XMFLOAT4X4 model_inverse_transpose_mat;
-    };
-
     struct VertexShaderUniform {
+        DirectX::XMFLOAT4X4 model_mat;
         DirectX::XMFLOAT4X4 view_mat;
         DirectX::XMFLOAT4X4 proj_mat;
     };
 
     // Input to Vertex Shader / Optional
     struct InputVertexAttributes {
-        float       pos_world[3];
-        float       normal_world[3];
+        float       pos[3];
+        float       normal[3];
         uint8_t     col[3];
         float       uv[2];
     };
@@ -110,12 +105,6 @@ private:
         float       normal_world[3];
         uint8_t     col[3];
         float       uv[2];
-    };
-
-    // Primitive Assembly Output
-    // Rasterization Input
-    struct Primitive {
-        OutputVertexAttributes vertices[3];
     };
 
     // Rasterization Output
@@ -133,6 +122,8 @@ private:
 
     ID3D12Resource * fragment_buffer[FrameQueueLength] = {};
     ID3D12Resource * frame_buffer[FrameQueueLength] = {};
+    ID3D12Resource * transformed_vertices_buffer[FrameQueueLength] = {}; 
+    ID3D12Resource * mvp_buffer[FrameQueueLength] = {}; 
 
     ID3D12DescriptorHeap * cbv_srv_uav_heap = nullptr;
 
@@ -172,49 +163,88 @@ private:
                 
         D3D12_HEAP_PROPERTIES   default_heap_props      = GetDefaultHeapProps(D3D12_HEAP_TYPE_DEFAULT);
 
-        // Buffer Allocation
-        uint32_t fragment_buffer_bytes = window_width * window_height * sizeof(Fragment);
-        D3D12_RESOURCE_DESC     resource_desc   = GetBufferResourceDesc(fragment_buffer_bytes);
-        resource_desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+        // Vertex Buffer (done already)
+        // Index Buffer (done already)
 
-        for(uint32_t i = 0; i < FrameQueueLength; ++i) {
-            res = device->CreateCommittedResource(&default_heap_props,
-                D3D12_HEAP_FLAG_NONE,
-                &resource_desc,
-                D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
-                nullptr,
-                IID_PPV_ARGS(&fragment_buffer[i]));
-            CHECK_AND_FAIL(res);
+        // MVP Buffer (for vertex_shading compute shader)
+        {
+            D3D12_RESOURCE_DESC     resource_desc   = GetBufferResourceDesc(sizeof(VertexShaderUniform));
+            resource_desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+
+            for(uint32_t i = 0; i < FrameQueueLength; ++i) {
+                res = device->CreateCommittedResource(&default_heap_props,
+                    D3D12_HEAP_FLAG_NONE,
+                    &resource_desc,
+                    D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER,
+                    nullptr,
+                    IID_PPV_ARGS(&mvp_buffer[i]));
+                CHECK_AND_FAIL(res);
+            }
         }
 
-        // FrameBuffer Texture Allocation
-                
-        D3D12_RESOURCE_DESC texture_resource_desc = {};
-        texture_resource_desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-        texture_resource_desc.Alignment = 0;
-        texture_resource_desc.Width = window_width;
-        texture_resource_desc.Height = window_height;
-        texture_resource_desc.DepthOrArraySize = 1;
-        texture_resource_desc.MipLevels = 1;
-        texture_resource_desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-        texture_resource_desc.SampleDesc.Count = 1;
-        texture_resource_desc.SampleDesc.Quality = 0;
-        texture_resource_desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
-        texture_resource_desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+        // Transformed Vertices Buffer
+        {
+            uint32_t transformed_vertices_buffer_bytes = static_cast<uint32_t>(mesh.vertices.size()) * sizeof(OutputVertexAttributes);
+            D3D12_RESOURCE_DESC     resource_desc   = GetBufferResourceDesc(transformed_vertices_buffer_bytes);
+            resource_desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
 
-        for(uint32_t i = 0; i < FrameQueueLength; ++i) {
-            res = device->CreateCommittedResource(&default_heap_props,
-                D3D12_HEAP_FLAG_NONE,
-                &texture_resource_desc,
-                D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
-                nullptr,
-                IID_PPV_ARGS(&frame_buffer[i]));
-            CHECK_AND_FAIL(res);
+            for(uint32_t i = 0; i < FrameQueueLength; ++i) {
+                res = device->CreateCommittedResource(&default_heap_props,
+                    D3D12_HEAP_FLAG_NONE,
+                    &resource_desc,
+                    D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+                    nullptr,
+                    IID_PPV_ARGS(&transformed_vertices_buffer[i]));
+                CHECK_AND_FAIL(res);
+            }
+        }
+
+        // Fragment Buffer Allocation
+        {
+            uint32_t fragment_buffer_bytes = window_width * window_height * sizeof(Fragment);
+            D3D12_RESOURCE_DESC     resource_desc   = GetBufferResourceDesc(fragment_buffer_bytes);
+            resource_desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+
+            for(uint32_t i = 0; i < FrameQueueLength; ++i) {
+                res = device->CreateCommittedResource(&default_heap_props,
+                    D3D12_HEAP_FLAG_NONE,
+                    &resource_desc,
+                    D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+                    nullptr,
+                    IID_PPV_ARGS(&fragment_buffer[i]));
+                CHECK_AND_FAIL(res);
+            }
+        }
+        
+        D3D12_RESOURCE_DESC texture_resource_desc = {};
+        // FrameBuffer Texture Allocation
+        {
+            texture_resource_desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+            texture_resource_desc.Alignment = 0;
+            texture_resource_desc.Width = window_width;
+            texture_resource_desc.Height = window_height;
+            texture_resource_desc.DepthOrArraySize = 1;
+            texture_resource_desc.MipLevels = 1;
+            texture_resource_desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+            texture_resource_desc.SampleDesc.Count = 1;
+            texture_resource_desc.SampleDesc.Quality = 0;
+            texture_resource_desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+            texture_resource_desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+
+            for(uint32_t i = 0; i < FrameQueueLength; ++i) {
+                res = device->CreateCommittedResource(&default_heap_props,
+                    D3D12_HEAP_FLAG_NONE,
+                    &texture_resource_desc,
+                    D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+                    nullptr,
+                    IID_PPV_ARGS(&frame_buffer[i]));
+                CHECK_AND_FAIL(res);
+            }
         }
 
         // Rasterizer Pass
         {
-            IDxcBlob * compute_shader = Demo::CompileShaderFromFile(L"../code/src/shaders/demo003/rasterizer.comp.hlsl", L"main", L"cs_6_0");
+            IDxcBlob * compute_shader = Demo::CompileShaderFromFile(L"../code/src/shaders/demo003/rasterization/rasterizer.comp.hlsl", L"main", L"cs_6_0");
             ASSERT(nullptr != compute_shader);
 
             // Create Root Signature
@@ -274,7 +304,7 @@ private:
 
         // Fragment Shading Pass
         {
-            IDxcBlob * compute_shader = Demo::CompileShaderFromFile(L"../code/src/shaders/demo003/fragment_shading.comp.hlsl", L"main", L"cs_6_0");
+            IDxcBlob * compute_shader = Demo::CompileShaderFromFile(L"../code/src/shaders/demo003/rasterization/fragment_shading.comp.hlsl", L"main", L"cs_6_0");
             ASSERT(nullptr != compute_shader);
 
             // Create Root Signature
@@ -374,6 +404,8 @@ private:
         for(uint32_t i = 0; i < FrameQueueLength; ++i) {
             frame_buffer[i]->Release();
             fragment_buffer[i]->Release();
+            transformed_vertices_buffer[i]->Release();
+            mvp_buffer[i]->Release();
         }
 
         cbv_srv_uav_heap->Release();
@@ -538,7 +570,7 @@ bool Demo_003_RasterizerCompute::DoInitResources() {
     CHECK_AND_FAIL(res);
 
     {
-        constexpr uint32_t VertexInputElemCount = 3;
+        constexpr uint32_t VertexInputElemCount = 4;
         D3D12_INPUT_ELEMENT_DESC vertex_layout[VertexInputElemCount] = {};
         vertex_layout[0].SemanticName = "POSITION";
         vertex_layout[0].SemanticIndex = 0;
@@ -548,21 +580,29 @@ bool Demo_003_RasterizerCompute::DoInitResources() {
         vertex_layout[0].InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
         vertex_layout[0].InstanceDataStepRate = 0;
         //
-        vertex_layout[1].SemanticName = "COLOR";
+        vertex_layout[1].SemanticName = "NORMAL";
         vertex_layout[1].SemanticIndex = 0;
-        vertex_layout[1].Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        vertex_layout[1].Format = DXGI_FORMAT_R32G32B32_FLOAT;
         vertex_layout[1].InputSlot = 0;
-        vertex_layout[1].AlignedByteOffset = offsetof(Vertex, col);
+        vertex_layout[1].AlignedByteOffset = offsetof(Vertex, normal);
         vertex_layout[1].InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
         vertex_layout[1].InstanceDataStepRate = 0;
         //
-        vertex_layout[2].SemanticName = "TEXCOORD";
+        vertex_layout[2].SemanticName = "COLOR";
         vertex_layout[2].SemanticIndex = 0;
-        vertex_layout[2].Format = DXGI_FORMAT_R32G32_FLOAT;
+        vertex_layout[2].Format = DXGI_FORMAT_R8G8B8A8_UNORM;
         vertex_layout[2].InputSlot = 0;
-        vertex_layout[2].AlignedByteOffset = offsetof(Vertex, uv);
+        vertex_layout[2].AlignedByteOffset = offsetof(Vertex, col);
         vertex_layout[2].InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
         vertex_layout[2].InstanceDataStepRate = 0;
+        //
+        vertex_layout[3].SemanticName = "TEXCOORD";
+        vertex_layout[3].SemanticIndex = 0;
+        vertex_layout[3].Format = DXGI_FORMAT_R32G32_FLOAT;
+        vertex_layout[3].InputSlot = 0;
+        vertex_layout[3].AlignedByteOffset = offsetof(Vertex, uv);
+        vertex_layout[3].InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
+        vertex_layout[3].InstanceDataStepRate = 0;
 
         D3D12_GRAPHICS_PIPELINE_STATE_DESC pso_desc = {};
         pso_desc.pRootSignature = root_signature;
