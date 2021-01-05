@@ -33,7 +33,7 @@ void main(CS_SystemValues cs) {
     int index = x + (y * width);
     Fragment frag = fragments[index];
 
-    if(x <= width && y <= height) {
+    if(x < width && y < height) {
         Framebuffer[cs.DTid.xy] = PackColor(float4(frag.color, 1.0f));
     }
 }
