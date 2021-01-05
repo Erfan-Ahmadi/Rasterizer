@@ -2,19 +2,19 @@
 
 // Input
 struct InputVertexAttribs {
-    float3 pos;
-    float3 normal;
-    float3 color;
+    float4 pos;
+    float4 normal;
+    float4 color;
     float2 uv;
 };
 StructuredBuffer<InputVertexAttribs> input_vertices : register(t0, space1);
 
 // Output -> Transformed
 struct OutputVertexAttribs {
-    float3 pos_ndc; // equivalent to gl_Position(? = gl_Position.xyz/gl_Position.w)
-    float3 pos_world;
-    float3 normal_world;
-    float3 color;
+    float4 pos_ndc; // equivalent to gl_Position(? = gl_Position.xyz/gl_Position.w)
+    float4 pos_world;
+    float4 normal_world;
+    float4 color;
     float2 uv;
 };
 RWStructuredBuffer<OutputVertexAttribs> output_vertices : register(u0, space1);
@@ -42,10 +42,10 @@ struct CS_SystemValues {
 void main(CS_SystemValues cs) {
     int index = cs.DTid.x;
     if(index <= vertices_count) {
-        float4 pos_world = mul(MatUniform.model, float4(input_vertices[index].pos, 1));
+        float4 pos_world = mul(MatUniform.model, float4(input_vertices[index].pos.xyz, 1.0f));
         float4 pos_cam = mul(MatUniform.view, pos_world);
         float4 pos_clip = mul(MatUniform.proj, pos_cam);
-        output_vertices[index].pos_ndc = pos_clip.xyz / pos_clip.w;
+        output_vertices[index].pos_ndc = float4(pos_clip.xyz / pos_clip.w, 0.0f);
         output_vertices[index].pos_world = pos_world;
         output_vertices[index].normal_world = input_vertices[index].normal;
         output_vertices[index].color = input_vertices[index].color;

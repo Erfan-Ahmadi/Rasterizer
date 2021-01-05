@@ -30,7 +30,7 @@ void main(CS_SystemValues cs) {
     Framebuffer.GetDimensions(width, height);
     int x = cs.DTid.x;
     int y = cs.DTid.y;
-    int index = x + (y * width);
+    int index = y * width + x;
     Fragment frag = fragments[index];
 
     if(x < width && y < height) {

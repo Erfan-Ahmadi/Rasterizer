@@ -79,10 +79,10 @@ private:
     // Fragment Shader Input
     struct Fragment {
         // Interpolated Values from OutputVertexAttributes
-        float       pos_ndc[4];
-        float       pos_world[4];
-        float       normal_world[4];
-        float       col[4];
+        float       pos_ndc[3];
+        float       pos_world[3];
+        float       normal_world[3];
+        float       col[3];
         float       uv[2];
     };
 
@@ -381,9 +381,9 @@ private:
                 
                 // : register(b0, space1)
                 parameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS; // indices_count
-                parameters[1].Constants.ShaderRegister = 1;
-                parameters[1].Constants.RegisterSpace = 0;
-                parameters[1].Constants.Num32BitValues = 1;
+                parameters[1].Constants.ShaderRegister = 0;
+                parameters[1].Constants.RegisterSpace = 1;
+                parameters[1].Constants.Num32BitValues = 3;
 
                 ID3DBlob * rs_blob = nullptr;
                 ID3DBlob * rs_error_blob = nullptr;
@@ -1062,6 +1062,7 @@ void Demo_003_RasterizerCompute::OnRender() {
 
                 uint32_t vertices_count = static_cast<uint32_t>(mesh.vertices.size());
                 current_cmd_list->SetComputeRoot32BitConstants(1, 1, &vertices_count, 0);
+
                 constexpr uint32_t thread_group_size_x = 16;
                 constexpr uint32_t thread_group_size_y = 1;
                 constexpr uint32_t thread_group_size_z = 1;
@@ -1076,6 +1077,12 @@ void Demo_003_RasterizerCompute::OnRender() {
                 current_cmd_list->SetComputeRootSignature(rasterizer_pass.root_signature);
                 current_cmd_list->SetPipelineState(rasterizer_pass.compute_pso);
                 current_cmd_list->SetComputeRootDescriptorTable(0, rasterizer_pass.descriptor_table_start[frame_index]);
+                
+                uint32_t indices_count = static_cast<uint32_t>(mesh.indices.size());
+                current_cmd_list->SetComputeRoot32BitConstants(1, 1, &indices_count, 0);
+                current_cmd_list->SetComputeRoot32BitConstants(1, 1, &window_width, 1);
+                current_cmd_list->SetComputeRoot32BitConstants(1, 1, &window_height, 2);
+
                 constexpr uint32_t thread_group_size_x = 16;
                 constexpr uint32_t thread_group_size_y = 1;
                 constexpr uint32_t thread_group_size_z = 1;
