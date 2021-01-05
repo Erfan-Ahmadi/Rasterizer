@@ -17,6 +17,8 @@ protected:
 private:
     static constexpr uint32_t FrameQueueLength = 2;
 
+    bool use_software_rasterizer = true;
+ 
     // SwapChain and It's RenderTarget Resources
     IDXGISwapChain4 * swap_chain = nullptr;
     ID3D12Resource * swap_chain_render_targets[FrameQueueLength];
@@ -48,16 +50,16 @@ private:
     
     // Rasterization Stuff
     struct VertexShadingUniform {
-        DirectX::XMFLOAT4X4 model_mat;
-        DirectX::XMFLOAT4X4 view_mat;
-        DirectX::XMFLOAT4X4 proj_mat;
+        DirectX::XMMATRIX model_mat;
+        DirectX::XMMATRIX view_mat;
+        DirectX::XMMATRIX proj_mat;
     };
 
     // Input to Vertex Shader / Optional
     struct InputVertexAttributes {
-        float       pos[3];
-        float       normal[3];
-        float       col[3];
+        float       pos[4];
+        float       normal[4];
+        float       col[4];
         float       uv[2];
     };
     static_assert(sizeof(InputVertexAttributes) == sizeof(Vertex));
@@ -66,10 +68,10 @@ private:
     // Vertex Shader Output
     // Primitive Assembly Input
     struct OutputVertexAttributes {
-        float       pos_ndc[3];
-        float       pos_world[3];
-        float       normal_world[3];
-        float       col[3];
+        float       pos_ndc[4];
+        float       pos_world[4];
+        float       normal_world[4];
+        float       col[4];
         float       uv[2];
     };
 
@@ -77,10 +79,10 @@ private:
     // Fragment Shader Input
     struct Fragment {
         // Interpolated Values from OutputVertexAttributes
-        float       pos_ndc[3];
-        float       pos_world[3];
-        float       normal_world[3];
-        float       col[3];
+        float       pos_ndc[4];
+        float       pos_world[4];
+        float       normal_world[4];
+        float       col[4];
         float       uv[2];
     };
 
@@ -1012,15 +1014,32 @@ void Demo_003_RasterizerCompute::OnUI() {
     ImGui::NewFrame();
     
     // Our state
-    static bool show_demo_window = true;
+    static bool show_window = true;
     ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
     // 1. Show the big demo window (Most of the sample code is in ImGui::ShowDemoWindow()! You can browse its code to learn more about Dear ImGui!).
-    ImGui::ShowDemoWindow(&show_demo_window);
+    // ImGui::ShowDemoWindow(&show_window);
+    ImGui::Begin("Settings", &show_window);
 
+    ImGui::Checkbox("Software Rasterization", &use_software_rasterizer);
+
+    ImGui::End();
 }
 
 void Demo_003_RasterizerCompute::OnUpdate() {
+    // Writing to MVP for our Model to Render
+    VertexShadingUniform mvp_uniform = {};
+    mvp_uniform.model_mat = DirectX::XMMatrixIdentity();
+    mvp_uniform.view_mat = DirectX::XMMatrixIdentity();
+    mvp_uniform.proj_mat = DirectX::XMMatrixIdentity();
+    static_assert(sizeof(DirectX::XMMATRIX) == sizeof(DirectX::XMFLOAT4X4));
+
+    D3D12_RANGE read_range = {}; read_range.Begin = 0; read_range.End = 0;
+    using Byte = uint8_t;
+    Byte * data_begin = nullptr;
+    HRESULT res = mvp_buffer[frame_index]->Map(0, &read_range, reinterpret_cast<void**>(&data_begin)); CHECK_AND_FAIL(res);
+    memcpy(data_begin, &mvp_uniform, sizeof(VertexShadingUniform));
+    mvp_buffer[frame_index]->Unmap(0, nullptr); 
 }
 
 void Demo_003_RasterizerCompute::OnRender() {
@@ -1031,8 +1050,7 @@ void Demo_003_RasterizerCompute::OnRender() {
         D3D12_CPU_DESCRIPTOR_HANDLE rtv_handle = rtv_heap->GetCPUDescriptorHandleForHeapStart();
         rtv_handle.ptr = rtv_handle.ptr + SIZE_T(frame_index * rtv_handle_increment_size);
 
-        constexpr bool use_hardware_rasterization = false;
-        if(false == use_hardware_rasterization) {
+        if(true == use_software_rasterizer) {
             
             current_cmd_list->SetDescriptorHeaps(1, &cbv_srv_uav_heap);
             
@@ -1041,6 +1059,9 @@ void Demo_003_RasterizerCompute::OnRender() {
                 current_cmd_list->SetComputeRootSignature(vertex_shading_pass.root_signature);
                 current_cmd_list->SetPipelineState(vertex_shading_pass.compute_pso);
                 current_cmd_list->SetComputeRootDescriptorTable(0, vertex_shading_pass.descriptor_table_start[frame_index]);
+
+                uint32_t vertices_count = static_cast<uint32_t>(mesh.vertices.size());
+                current_cmd_list->SetComputeRoot32BitConstants(1, 1, &vertices_count, 0);
                 constexpr uint32_t thread_group_size_x = 16;
                 constexpr uint32_t thread_group_size_y = 1;
                 constexpr uint32_t thread_group_size_z = 1;

@@ -34,12 +34,6 @@ void main(CS_SystemValues cs) {
     Fragment frag = fragments[index];
 
     if(x <= width && y <= height) {
-        if(x < width / 2) {
-            // Framebuffer[cs.DTid.xy] = PackColor(float4(1.0f, 1.0f, 0.5f, 1.0f));
-        } else {
-            // Framebuffer[cs.DTid.xy] = PackColor(float4(0.92f, 0.2f, 0.67f, 1.0f));
-        }
-
         Framebuffer[cs.DTid.xy] = PackColor(float4(frag.color, 1.0f));
     }
 }
