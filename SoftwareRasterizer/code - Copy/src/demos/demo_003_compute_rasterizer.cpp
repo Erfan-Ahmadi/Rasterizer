@@ -381,7 +381,7 @@ private:
                 descriptor_ranges[1].BaseShaderRegister = 1;
                 descriptor_ranges[1].RegisterSpace = 1;
                 descriptor_ranges[1].Flags = D3D12_DESCRIPTOR_RANGE_FLAG_NONE;
-                descriptor_ranges[1].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+                descriptor_ranges[1].OffsetInDescriptorsFromTableStart = 0;
 
                 descriptor_ranges[2].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
                 descriptor_ranges[2].NumDescriptors = 1;

@@ -41,54 +41,19 @@ struct CS_SystemValues {
 // thread 0 handles 0,1,2 indices
 // thread 1 handles 3,4,5 and so on...
 
-void CalculateTriangleAABB(float3 pos_ndc_0, float3 pos_ndc_1, float3 pos_ndc_2, out float2 min_point, out float2 max_point) {
+void CalculateTriangleAABB(float4 pos_ndc_0, float4 pos_ndc_1, float4 pos_ndc_2, out float2 min_point, out float2 max_point) {
     min_point = float2(min(pos_ndc_0.x, min(pos_ndc_1.x, pos_ndc_2.x)), min(pos_ndc_0.y, min(pos_ndc_1.y, pos_ndc_2.y)));
     max_point = float2(max(pos_ndc_0.x, max(pos_ndc_1.x, pos_ndc_2.x)), max(pos_ndc_0.y, max(pos_ndc_1.y, pos_ndc_2.y)));
 }
 
-float calculateSignedArea(float3 pos_ndc_0, float3 pos_ndc_1, float3 pos_ndc_2)
+float3 CalculateBarycentricCoordinates(
+    OutputVertexAttribs v0,
+    OutputVertexAttribs v1,
+    OutputVertexAttribs v2,
+    float2 ndc)
 {
-    return 0.5 *
-        ((pos_ndc_2.x - pos_ndc_0.x) * (pos_ndc_1.y - pos_ndc_0.y) -
-         (pos_ndc_1.x - pos_ndc_0.x) * (pos_ndc_2.y - pos_ndc_0.y));
-}
-
-float calculateBarycentricCoordinateValue(
-        float2 a, float2 b, float2 c,     
-        float3 pos_ndc_0, float3 pos_ndc_1, float3 pos_ndc_2)
-{
-    float3 bary_pos_ndc_0 = float3(a, 0);
-    float3 bary_pos_ndc_1 = float3(b, 0);
-    float3 bary_pos_ndc_2 = float3(c, 0);
-    return calculateSignedArea(bary_pos_ndc_0, bary_pos_ndc_1, bary_pos_ndc_2) / calculateSignedArea(pos_ndc_0, pos_ndc_1, pos_ndc_2);
-}
-
-bool isBarycentricCoordInBounds(float3 barycentric_coord)
-{
-    return barycentric_coord.x >= 0.0 && barycentric_coord.x <= 1.0 &&
-           barycentric_coord.y >= 0.0 && barycentric_coord.y <= 1.0 &&
-           barycentric_coord.z >= 0.0 && barycentric_coord.z <= 1.0;
-}
-
-float3 CalculateBarycentricCoordinates(float3 pos_ndc_0, float3 pos_ndc_1, float3 pos_ndc_2, float2 v)
-{
-    float beta  = calculateBarycentricCoordinateValue(
-            float2(pos_ndc_0.x, pos_ndc_0.y),
-            v,
-            float2(pos_ndc_2.x, pos_ndc_2.y),
-            pos_ndc_0, pos_ndc_1, pos_ndc_2);
-    float gamma = calculateBarycentricCoordinateValue(
-            float2(pos_ndc_0.x, pos_ndc_0.y),
-            float2(pos_ndc_1.x, pos_ndc_1.y),
-            v,
-            pos_ndc_0, pos_ndc_1, pos_ndc_2);
-    float alpha = 1.0 - beta - gamma;
-    return float3(alpha, beta, gamma);
-}
-
-float3 baryinterp(float3 bary, float3 v0, float3 v1, float3 v2)
-{
-    return bary.x * v0 + bary.y * v1 + bary.z * v2;
+        float3 ret = float3(0, 0, 0);
+        return ret;
 }
 
 [numthreads( 16, 1, 1 )]
@@ -104,7 +69,7 @@ void main(CS_SystemValues cs) {
 
         float2 min_pointf = float2(0.0f, 0.0f);
         float2 max_pointf = float2(0.0f, 0.0f);
-        CalculateTriangleAABB(v0.pos_ndc.xyz, v1.pos_ndc.xyz, v2.pos_ndc.xyz, min_pointf, max_pointf);
+        CalculateTriangleAABB(v0.pos_ndc, v1.pos_ndc, v2.pos_ndc, min_pointf, max_pointf);
 
         // Convert to Screen Space Coordinates
         float2 min_point_s = max(float2(0.0f, 0.0f), float2((min_pointf.x + 1.0f) * 0.5f * width, (min_pointf.y + 1.0f) * 0.5f * height));
