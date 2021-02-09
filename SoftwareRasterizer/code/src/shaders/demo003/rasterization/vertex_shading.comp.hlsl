@@ -45,7 +45,7 @@ void main(CS_SystemValues cs) {
         float4 pos_world = mul(MatUniform.model, float4(input_vertices[index].pos.xyz, 1.0f));
         float4 pos_cam = mul(MatUniform.view, pos_world);
         float4 pos_clip = mul(MatUniform.proj, pos_cam);
-        output_vertices[index].pos_ndc = float4(float3(1.0f, -1.0f, 0.0f) * (pos_clip.xyz / pos_clip.w), 0.0f);
+        output_vertices[index].pos_ndc = float4((pos_clip.xyz / pos_clip.w), 0.0f);
         output_vertices[index].pos_world = pos_world;
         output_vertices[index].normal_world = input_vertices[index].normal;
         output_vertices[index].color = input_vertices[index].color;

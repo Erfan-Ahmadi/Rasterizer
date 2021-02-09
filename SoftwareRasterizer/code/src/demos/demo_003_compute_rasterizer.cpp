@@ -79,10 +79,10 @@ private:
     // Fragment Shader Input
     struct Fragment {
         // Interpolated Values from OutputVertexAttributes
-        float       pos_ndc[3];
-        float       pos_world[3];
-        float       normal_world[3];
-        float       col[3];
+        float       pos_ndc[4];
+        float       pos_world[4];
+        float       normal_world[4];
+        float       col[4];
         float       uv[2];
     };
 

@@ -19,15 +19,15 @@ cbuffer info : register(b0, space1) {
 
 // Output
 struct Fragment { // Interpolated Values for each Fragment
-    float3 pos_ndc; // equivalent to interpolated gl_Position(?)
-    float3 pos_world;
-    float3 normal_world;
-    float3 color;
+    float4 pos_ndc; // equivalent to interpolated gl_Position(?)
+    float4 pos_world;
+    float4 normal_world;
+    float4 color;
     float2 uv;
 };
 RWStructuredBuffer<Fragment> fragments : register(u0, space1);
 
-RWStructuredBuffer<int> depth_array : register(u1, space1);
+RWStructuredBuffer<float> depth_array : register(u1, space1);
 
 
 struct CS_SystemValues {
@@ -86,21 +86,30 @@ float3 CalculateBarycentricCoordinates(float3 pos_ndc_0, float3 pos_ndc_1, float
     return float3(alpha, beta, gamma);
 }
 
+float4 baryinterp(float3 bary, float4 v0, float4 v1, float4 v2)
+{
+    return bary.x * v0 + bary.y * v1 + bary.z * v2;
+}
+
 float3 baryinterp(float3 bary, float3 v0, float3 v1, float3 v2)
 {
     return bary.x * v0 + bary.y * v1 + bary.z * v2;
 }
 
+float2 baryinterp(float3 bary, float2 v0, float2 v1, float2 v2)
+{
+    return bary.x * v0 + bary.y * v1 + bary.z * v2;
+}
+
+
 [numthreads( 16, 1, 1 )]
 void main(CS_SystemValues cs) {
-    int index = cs.DTid.x;
-    fragments[index].color = float3(1.0f, 0.0f, 0.0f);
-    if(3 * index + 2 < indices_count) {
-        int index = cs.DTid.x;
-
-        OutputVertexAttribs v0 = vertices[indices[3 * index + 0]];
-        OutputVertexAttribs v1 = vertices[indices[3 * index + 1]];
-        OutputVertexAttribs v2 = vertices[indices[3 * index + 2]];
+    int tid = cs.DTid.x;
+    // fragments[tid].color = float3(1.0f, 0.0f, 0.0f);
+    if(3 * tid + 2 < indices_count) {
+        OutputVertexAttribs v0 = vertices[indices[3 * tid + 0]];
+        OutputVertexAttribs v1 = vertices[indices[3 * tid + 1]];
+        OutputVertexAttribs v2 = vertices[indices[3 * tid + 2]];
 
         float2 min_pointf = float2(0.0f, 0.0f);
         float2 max_pointf = float2(0.0f, 0.0f);
@@ -110,10 +119,28 @@ void main(CS_SystemValues cs) {
         float2 min_point_s = max(float2(0.0f, 0.0f), float2((min_pointf.x + 1.0f) * 0.5f * width, (min_pointf.y + 1.0f) * 0.5f * height));
         float2 max_point_s = min(float2(width, height), float2((max_pointf.x + 1.0f) * 0.5f * width, (max_pointf.y + 1.0f) * 0.5f * height));
         
+
         for(int x = min_point_s.x; x < max_point_s.x; ++x) {
             for(int y = min_point_s.y; y < max_point_s.y; ++y) {
-                int index = y * width + x;
-                fragments[index].color = float3(.5f, .3f, 0.67f);
+                int frag_index = (int)((height - y - 1) * width + x);
+
+                float2 ndc = float2(
+                    float(x * 2 - int(width)) / float(width),
+                    float(y * 2 - int(height)) / float(height)
+                );
+
+                float3 bary = CalculateBarycentricCoordinates(v0.pos_ndc.xyz, v1.pos_ndc.xyz, v2.pos_ndc.xyz, ndc);
+
+                if(isBarycentricCoordInBounds(bary)) {
+
+                    float depthnew = 0.0f;
+
+                    fragments[frag_index].pos_ndc = float4(ndc, depthnew, 0.0f);
+                    fragments[frag_index].pos_world = baryinterp(bary, v0.pos_world, v1.pos_world, v2.pos_world);
+                    fragments[frag_index].color = baryinterp(bary, v0.color, v1.color, v2.color);
+                    fragments[frag_index].normal_world = baryinterp(bary, v0.normal_world, v1.normal_world, v2.normal_world);
+                    fragments[frag_index].uv = baryinterp(bary, v0.uv, v1.uv, v2.uv);
+                }
             }
         }
     }

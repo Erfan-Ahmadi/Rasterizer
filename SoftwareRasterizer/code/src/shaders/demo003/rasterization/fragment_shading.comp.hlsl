@@ -1,10 +1,10 @@
 
 // Input
 struct Fragment { // Interpolated Values for each Fragment
-    float3 pos_ndc; // equivalent to interpolated gl_Position(?)
-    float3 pos_world;
-    float3 normal_world;
-    float3 color;
+    float4 pos_ndc; // equivalent to interpolated gl_Position(?)
+    float4 pos_world;
+    float4 normal_world;
+    float4 color;
     float2 uv;
 };
 StructuredBuffer<Fragment> fragments : register(t0, space1);
@@ -34,6 +34,6 @@ void main(CS_SystemValues cs) {
     Fragment frag = fragments[index];
 
     if(x < width && y < height) {
-        Framebuffer[cs.DTid.xy] = PackColor(float4(frag.color, 1.0f));
+        Framebuffer[cs.DTid.xy] = PackColor(float4(frag.color.xyz, 1.0f));
     }
 }
